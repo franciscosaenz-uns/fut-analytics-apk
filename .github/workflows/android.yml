@@ -5,12 +5,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -23,3 +26,15 @@ jobs:
         with:
           name: futbol-analisis-apk
           path: app/build/outputs/apk/**/*.apk
+      - name: Copiar APK con nombre legible
+        if: github.ref == 'refs/heads/main'
+        run: cp app/build/outputs/apk/release/app-release.apk futbol-analisis.apk
+      # Publica el APK en la pagina de Releases para descargarlo directo desde el telefono.
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v0.1.0
+          name: Fútbol Análisis v0.1.0
+          prerelease: true
+          body: APK compilado automáticamente desde main. Instálalo en Android permitiendo "instalar apps desconocidas".
+          files: futbol-analisis.apk
