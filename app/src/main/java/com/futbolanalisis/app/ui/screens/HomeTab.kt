@@ -340,7 +340,7 @@ fun MatchRow(m: MatchSummary, onClick: () -> Unit) {
                     "${(m.distanceM / 1000).fmt(2)} km · ${(m.playingTimeS / 60).fmt(0)} min · ${m.maxSpeedKmh.fmt(1)} km/h",
                     style = MaterialTheme.typography.labelMedium, color = Brand.Text.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                if (m.goals + m.assists > 0) Text("${m.goals} goles · ${m.assists} asistencias", style = MaterialTheme.typography.labelSmall, color = Brand.Accent)
+                if (m.goals + m.assists > 0) Text("${m.goals} ${if (m.goals == 1) "gol" else "goles"} · ${m.assists} ${if (m.assists == 1) "asistencia" else "asistencias"}", style = MaterialTheme.typography.labelSmall, color = Brand.Accent)
             }
             Spacer(Modifier.width(8.dp))
             ScoreRing(m.score?.overall, size = 50.dp)
