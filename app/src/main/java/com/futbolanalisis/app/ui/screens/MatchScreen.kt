@@ -69,13 +69,14 @@ import com.futbolanalisis.app.ui.minutes
 import com.futbolanalisis.core.AnalysisOptions
 import com.futbolanalisis.core.MatchReport
 import com.futbolanalisis.core.pitch.CalibrationMethod
+import com.futbolanalisis.core.coach.MatchLog
 import com.futbolanalisis.core.physical.AlertLevel
 import com.futbolanalisis.core.physical.MatchClock
 import com.futbolanalisis.core.physical.ZoneMode
 import com.futbolanalisis.core.tactical.Direction
 import com.futbolanalisis.core.tactical.TacticalReport
 
-private val tabs = listOf("Resumen", "Físico", "Mapa de calor", "Táctico", "Fisiología")
+private val tabs = listOf("Resumen", "Coach", "Físico", "Mapa de calor", "Táctico", "Fisiología")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +89,7 @@ fun MatchScreen(
     onDelete: () -> Unit,
     onTrim: () -> Unit,
     onCalibrate: () -> Unit,
+    onLog: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
@@ -112,10 +114,11 @@ fun MatchScreen(
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text(r.startMs.dateTime(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (tab) {
-                    0 -> SummaryTab(r)
-                    1 -> PhysicalTab(r)
-                    2 -> HeatmapTab(r, onCalibrate)
-                    3 -> TacticalTab(r)
+                    0 -> SummaryTab(r, record.log, onLog)
+                    1 -> CoachTab(record)
+                    2 -> PhysicalTab(r)
+                    3 -> HeatmapTab(r, onCalibrate)
+                    4 -> TacticalTab(r)
                     else -> PhysiologyTab(r)
                 }
                 Spacer(Modifier.height(32.dp))
@@ -134,10 +137,11 @@ fun MatchScreen(
 }
 
 @Composable
-private fun SummaryTab(r: MatchReport) {
+private fun SummaryTab(r: MatchReport, log: MatchLog, onLog: () -> Unit) {
     val clock = MatchClock(r.periods)
     val p = r.physical
     val d = r.tactical.description
+    LogCard(log, onLog)
     Card(Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.padding(16.dp)) {
             Text(d.archetype, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -408,7 +412,7 @@ private fun PhysiologyTab(r: MatchReport) {
         SectionTitle("Carga percibida (sRPE)")
         Text(
             a.sessionRpeLoad?.let { "Carga: ${it.fmt(0)} UA (RPE ${r.options.rpe} × ${(r.physical.playingTimeS / 60).fmt(0)} min)" }
-                ?: "Indica tu esfuerzo percibido (0-10) en ⚙ para calcular la carga de sesión.",
+                ?: "Indica tu esfuerzo percibido (0-10) en el registro del partido (pestaña Resumen) para calcular la carga de sesión.",
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -462,12 +466,6 @@ private fun SettingsDialog(
                         FilterChip(opts.physical.zoneMode == zm, { onOptions { it.copy(physical = it.physical.copy(zoneMode = zm)) } }, label = { Text(zm.label) })
                     }
                 }
-                var rpe by remember { mutableStateOf((opts.rpe ?: 0).toFloat()) }
-                Text("Esfuerzo percibido (RPE): ${if (rpe < 0.5f) "sin indicar" else rpe.toInt().toString() + "/10"}", style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    value = rpe, onValueChange = { rpe = it }, valueRange = 0f..10f, steps = 9,
-                    onValueChangeFinished = { onOptions { it.copy(rpe = rpe.toInt().takeIf { v -> v > 0 }) } },
-                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Invertir dirección de ataque")

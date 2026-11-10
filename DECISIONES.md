@@ -74,3 +74,22 @@
 9. **Métricas nuevas** tras revisar la literatura: picos de demanda 1/3/5/10', RHIE, potencia metabólica, HMLD,
    gasto energético, trabajo:pausa, sRPE, desacople cardiaco y distancia por tercio. Detalle en METRICAS.md.
 10. Los partidos guardados con la v0.1 se re-analizan solos al abrirlos (se conservan los datos crudos).
+
+# Decisiones de la v0.3
+
+1. **Registro del partido** (pantalla propia): rival, resultado, posición jugada, superficie, goles, asistencias, tiros y
+   tiros al arco, pases clave, recuperaciones, duelos, tarjetas, RPE (escala CR-10), autoevaluación, sensaciones y notas.
+   El RPE alimenta la carga sRPE y la posición jugada orienta la dirección de ataque. Los totales de goles y asistencias
+   aparecen en el inicio.
+2. **Dirección de ataque con pista de posición**: si la posición (del registro o la habitual del perfil) es ofensiva,
+   la heurística asume que el jugador pasa más tiempo en campo rival. Antes un delantero salía invertido por defecto.
+3. **Consejos para el partido** (pestaña Coach): reglas explicables sobre energía, ritmo, caídas de intensidad,
+   esfuerzos repetidos, desconexión, FC, posición según el rol, producción (tiros, duelos, llegada) y recuperación
+   (RPE alto con FC baja, HRV baja). Cada consejo indica su minuto cuando aplica. Máximo 8, ordenados por prioridad.
+4. **Entrenamientos**: los físicos salen de los datos (sprint repetido si cae la intensidad, 4×4 aeróbico si la energía
+   baja o hay desacople, velocidad si hay pocos sprints, cambios de dirección si hay pocas aceleraciones, y siempre
+   prevención de isquios/aductores). Los técnicos y tácticos salen de una biblioteca por grupo de rol (8 grupos).
+5. **Comparación con profesionales**: huella de rol de 9 rasgos (zona más frecuente, tercios, carril central, recorrido
+   vertical y lateral, área, dirección de sprints) comparada con 33 perfiles aproximados de jugadores actuales.
+   Los perfiles son estimaciones a partir de mapas de calor y descripciones de rol públicas, no datos oficiales de tracking;
+   la app lo aclara. Similitud = exp(−distancia ponderada²).

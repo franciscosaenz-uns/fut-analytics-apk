@@ -185,6 +185,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(profile = p, zoneMode = zoneMode, message = "Perfil guardado. Los partidos nuevos usarán estos valores.") }
     }
 
+    fun saveLog(id: String, log: com.futbolanalisis.core.coach.MatchLog) = runBusy {
+        _current.value = repo.saveLog(id, _state.value.profile, log)
+        refreshMatches()
+        _state.update { it.copy(message = "Registro guardado") }
+    }
+
     fun setTrim(id: String, startMs: Long?, endMs: Long?) = updateOptions(id) { it.copy(trimStartMs = startMs, trimEndMs = endMs) }
 
     /** Aplica una calibración manual (null = volver a la automática) y opcionalmente la guarda como cancha. */

@@ -43,6 +43,8 @@ data class PlayerProfile(
     val maxHeartRate: Int? = null,
     val restingHeartRate: Int? = null,
     val weightKg: Double? = null,
+    /** Posición habitual (p. ej. "Delantero centro"); orienta la dirección de ataque automática. */
+    val usualPosition: String? = null,
 ) {
     val effectiveMaxHr: Int get() = maxHeartRate ?: (208.0 - 0.7 * age).toInt()
 }

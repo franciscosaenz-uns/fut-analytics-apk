@@ -26,6 +26,7 @@ import com.futbolanalisis.app.ui.screens.MatchScreen
 import com.futbolanalisis.app.ui.screens.ProfileScreen
 import com.futbolanalisis.app.ui.screens.CalibrationScreen
 import com.futbolanalisis.app.ui.screens.TrimScreen
+import com.futbolanalisis.app.ui.screens.LogScreen
 import com.futbolanalisis.app.ui.theme.FutbolTheme
 
 class MainActivity : ComponentActivity() {
@@ -112,7 +113,12 @@ private fun App(vm: AppViewModel) {
                 onDelete = { vm.delete(id); nav.popBackStack() },
                 onTrim = { nav.navigate("trim/$id") },
                 onCalibrate = { nav.navigate("calibrate/$id") },
+                onLog = { nav.navigate("log/$id") },
             )
+        }
+        composable("log/{id}") { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            LogScreen(record = current?.takeIf { it.id == id }, onSave = { vm.saveLog(id, it) }, onBack = { nav.popBackStack() })
         }
         composable("trim/{id}") { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable

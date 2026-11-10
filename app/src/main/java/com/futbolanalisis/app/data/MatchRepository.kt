@@ -4,6 +4,7 @@ import android.content.Context
 import com.futbolanalisis.core.AnalysisOptions
 import com.futbolanalisis.core.MatchAnalyzer
 import com.futbolanalisis.core.MatchReport
+import com.futbolanalisis.core.coach.MatchLog
 import com.futbolanalisis.core.model.HeartRateSample
 import com.futbolanalisis.core.model.PlayerProfile
 import com.futbolanalisis.core.model.Track
@@ -29,6 +30,7 @@ data class MatchRecord(
     val wellness: WellnessSnapshot? = null,
     val options: AnalysisOptions = AnalysisOptions(),
     val report: MatchReport,
+    val log: MatchLog = MatchLog(),
 )
 
 @Serializable
@@ -43,6 +45,10 @@ data class MatchSummary(
     val sprints: Int = 0,
     val maxSpeedKmh: Double = 0.0,
     val heatmap: Heatmap? = null,
+    val goals: Int = 0,
+    val assists: Int = 0,
+    val result: String? = null,
+    val opponent: String = "",
 )
 
 /**
@@ -70,7 +76,7 @@ class MatchRepository(context: Context) {
         val report = withContext(Dispatchers.Default) {
             MatchAnalyzer.analyze(raw.track, profiles.load(), raw.options, raw.externalHeartRate, raw.wellness, raw.title)
         }
-        val migrated = MatchRecord(raw.id, raw.title, raw.createdAtMs, raw.track, raw.externalHeartRate, raw.wellness, raw.options, report)
+        val migrated = MatchRecord(raw.id, raw.title, raw.createdAtMs, raw.track, raw.externalHeartRate, raw.wellness, raw.options, report, raw.log)
         save(migrated)
         return migrated
     }
@@ -84,6 +90,7 @@ class MatchRepository(context: Context) {
         val externalHeartRate: List<HeartRateSample> = emptyList(),
         val wellness: WellnessSnapshot? = null,
         val options: AnalysisOptions = AnalysisOptions(),
+        val log: MatchLog = MatchLog(),
     )
 
     suspend fun create(
@@ -120,6 +127,18 @@ class MatchRepository(context: Context) {
         return updated
     }
 
+    /** Guarda el registro manual; el RPE y la posición también alimentan el análisis. */
+    suspend fun saveLog(id: String, profile: PlayerProfile, log: MatchLog): MatchRecord? {
+        val old = get(id) ?: return null
+        val options = old.options.copy(rpe = log.rpe, positionHint = log.positionPlayed.ifBlank { null })
+        val report = if (options != old.options) withContext(Dispatchers.Default) {
+            MatchAnalyzer.analyze(old.track, profile, options, old.externalHeartRate, old.wellness, old.title)
+        } else old.report
+        val updated = old.copy(options = options, report = report, log = log)
+        save(updated)
+        return updated
+    }
+
     suspend fun rename(id: String, title: String) {
         val old = get(id) ?: return
         save(old.copy(title = title, report = old.report.copy(title = title)))
@@ -143,6 +162,10 @@ class MatchRepository(context: Context) {
             sprints = record.report.physical.sprints.size,
             maxSpeedKmh = record.report.physical.maxSpeedKmh,
             heatmap = record.report.tactical.heatmap,
+            goals = record.log.goals,
+            assists = record.log.assists,
+            result = record.log.result,
+            opponent = record.log.opponent,
         )
         writeIndex(list().filterNot { it.id == record.id } + summary)
     }

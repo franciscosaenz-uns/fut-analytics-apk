@@ -153,3 +153,33 @@ class ThreeCornersTest {
         assertTrue(abs(corners[2].first - geo(90.0, 55.0).first) < 1e-7)
     }
 }
+
+class CoachTest {
+    private val report by lazy { MatchAnalyzer.analyze(SyntheticMatch.generate(), PlayerProfile(age = 30)) }
+
+    @Test
+    fun coachGivesTipsDrillsAndPros() {
+        val c = com.futbolanalisis.core.coach.Coach.advise(report, com.futbolanalisis.core.coach.MatchLog(shots = 5, shotsOnTarget = 1, rpe = 9))
+        assertTrue(c.inMatchTips.isNotEmpty())
+        assertTrue(c.inMatchTips.any { it.title.contains("tiro") })
+        assertTrue(c.drills.map { it.type }.toSet().size == 3, "debe haber físico, técnico y táctico")
+        assertEquals(3, c.proMatches.size)
+        println(c.proMatches.map { "${it.player.name} ${it.similarity.toInt()}% ${it.sharedTraits}" })
+        // Un mediocentro sintético debe parecerse a mediocampistas, no a porteros ni nueves.
+        assertTrue(c.proMatches.first().player.role.let { it.contains("Mediocentro") || it.contains("Pivote") || it.contains("Interior") }, c.proMatches.first().player.role)
+    }
+
+    @Test
+    fun strikerLooksLikeStriker() {
+        val r = MatchAnalyzer.analyze(SyntheticMatch.generate(homeX = 85.0, homeY = 34.0), options = AnalysisOptions(positionHint = "Delantero centro"))
+        val top = com.futbolanalisis.core.coach.ProComparison.compare(r).first()
+        println("Delantero → ${top.player.name} (${top.player.role})")
+        assertTrue(top.player.fingerprint.depth > 0.6, top.player.name)
+    }
+
+    @Test
+    fun matchLogResult() {
+        assertEquals("Victoria 3-1", com.futbolanalisis.core.coach.MatchLog(goalsFor = 3, goalsAgainst = 1).result)
+        assertTrue(com.futbolanalisis.core.coach.MatchLog().isEmpty)
+    }
+}

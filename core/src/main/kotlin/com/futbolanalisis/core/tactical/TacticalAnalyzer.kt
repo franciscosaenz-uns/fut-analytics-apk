@@ -96,6 +96,8 @@ object TacticalAnalyzer {
         calibration: PitchCalibration,
         sprints: List<Effort>,
         attackFlipped: Boolean? = null,
+        /** Si se sabe que juega en ataque (delantero, extremo, mediapunta), pasa más tiempo en campo rival. */
+        attackingPositionHint: Boolean = false,
         cols: Int = 21,
         rows: Int = 14,
     ): TacticalReport {
@@ -105,7 +107,7 @@ object TacticalAnalyzer {
         val flip = attackFlipped ?: run {
             val first = samples.filter { it.period == firstPeriod }
             val meanX = first.map { calibration.toPitch(it.point).x }.average()
-            meanX > dims.length / 2
+            if (attackingPositionHint) meanX < dims.length / 2 else meanX > dims.length / 2
         }
         val calA = calibration.withAttackFlipped(flip)
         val calB = calibration.withAttackFlipped(!flip)

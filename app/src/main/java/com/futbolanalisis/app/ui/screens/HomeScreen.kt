@@ -147,14 +147,16 @@ private fun Hero(state: UiState, onHealth: () -> Unit, onProfile: () -> Unit, on
             } else {
                 val km = state.matches.sumOf { it.distanceM }
                 val sprints = state.matches.sumOf { it.sprints }
-                val top = state.matches.maxOf { it.maxSpeedKmh }
+                val goals = state.matches.sumOf { it.goals }
+                val assists = state.matches.sumOf { it.assists }
                 Text("Hola, ${state.profile.name}", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     HeroStat("${state.matches.size}", "partidos")
                     HeroStat(km.km(), "recorridos")
+                    HeroStat("$goals", "goles")
+                    HeroStat("$assists", "asistencias")
                     HeroStat("$sprints", "sprints")
-                    HeroStat("${top.fmt(1)}", "km/h máx")
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -219,6 +221,11 @@ private fun MatchCard(m: MatchSummary, modifier: Modifier, onClick: () -> Unit) 
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(m.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                m.result?.let { res ->
+                    Text(res + (m.opponent.takeIf { it.isNotBlank() }?.let { " vs $it" } ?: "") +
+                        (if (m.goals + m.assists > 0) " · ⚽${m.goals} 🅰${m.assists}" else ""),
+                        style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
                 Text(m.startMs.dateTime(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Text(m.archetype.ifBlank { m.role }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, maxLines = 1)

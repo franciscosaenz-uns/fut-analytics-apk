@@ -42,6 +42,8 @@ data class AnalysisOptions(
     val trimEndMs: Long? = null,
     /** Esfuerzo percibido 0-10 (escala CR-10 de Borg) para la carga sRPE. */
     val rpe: Int? = null,
+    /** Posición declarada en el registro del partido; ayuda a orientar la dirección de ataque. */
+    val positionHint: String? = null,
 )
 
 @Serializable
@@ -105,7 +107,9 @@ object MatchAnalyzer {
             splits = physicalRaw.splits.map { it.copy(avgHeartRate = HeartRateAnalyzer.averageBetween(hrSamples, it.startMs, it.endMs)) },
         )
 
-        val tactical = TacticalAnalyzer.analyze(samples, calibration, physical.sprints, options.attackFlipped)
+        val hint = (options.positionHint ?: profile.usualPosition).orEmpty().lowercase()
+        val attackingHint = listOf("delantero", "extremo", "mediapunta", "punta", "nueve", "9").any { hint.contains(it) }
+        val tactical = TacticalAnalyzer.analyze(samples, calibration, physical.sprints, options.attackFlipped, attackingHint)
 
         val energy = EnergyModel.analyze(
             samples, periods, physical.referenceMaxSpeedKmh, hrSamples, profile.effectiveMaxHr, profile.weightKg,

@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.futbolanalisis.core.model.PlayerProfile
 import com.futbolanalisis.core.physical.ZoneMode
+import com.futbolanalisis.core.coach.MatchLog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +44,7 @@ fun ProfileScreen(profile: PlayerProfile, zoneMode: ZoneMode, onSave: (PlayerPro
     var restHr by remember { mutableStateOf(profile.restingHeartRate?.toString() ?: "") }
     var weight by remember { mutableStateOf(profile.weightKg?.toString() ?: "") }
     var mode by remember { mutableStateOf(zoneMode) }
+    var position by remember { mutableStateOf(profile.usualPosition ?: "") }
     val number = KeyboardOptions(keyboardType = KeyboardType.Number)
 
     Scaffold(topBar = {
@@ -64,6 +68,13 @@ fun ProfileScreen(profile: PlayerProfile, zoneMode: ZoneMode, onSave: (PlayerPro
             )
             OutlinedTextField(restHr, { restHr = it.filter(Char::isDigit) }, label = { Text("FC en reposo (opcional)") }, keyboardOptions = number, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Peso en kg (opcional)") }, keyboardOptions = number, modifier = Modifier.fillMaxWidth())
+            Text("Posición habitual", style = MaterialTheme.typography.titleSmall)
+            Text("Ayuda a orientar la dirección de ataque si no la registras en cada partido.", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                MatchLog.POSITIONS.forEach { pos ->
+                    FilterChip(position == pos, { position = if (position == pos) "" else pos }, label = { Text(pos) })
+                }
+            }
             Text("Umbrales de velocidad", style = MaterialTheme.typography.titleSmall)
             ZoneMode.entries.forEach { m ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -90,6 +101,7 @@ fun ProfileScreen(profile: PlayerProfile, zoneMode: ZoneMode, onSave: (PlayerPro
                             maxHeartRate = maxHr.toIntOrNull()?.takeIf { it in 120..230 },
                             restingHeartRate = restHr.toIntOrNull()?.takeIf { it in 30..120 },
                             weightKg = weight.toDoubleOrNull(),
+                            usualPosition = position.ifBlank { null },
                         ),
                         mode,
                     )
