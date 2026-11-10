@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Solo para descargar el mapa satelital al calibrar la cancha. -->
+    <!-- Solo para descargar la vista satelital de la cancha. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -54,6 +54,17 @@
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
             </intent-filter>
         </activity>
+
+        <!-- Para compartir la imagen del partido con otras apps (Instagram, WhatsApp...). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Explicación de privacidad que Health Connect muestra al pedir permisos (Android 13 y anteriores). -->
         <activity

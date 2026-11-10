@@ -21,7 +21,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.futbolanalisis.app.ui.screens.HealthScreen
-import com.futbolanalisis.app.ui.screens.HomeScreen
+import com.futbolanalisis.app.ui.screens.MainScreen
+import com.futbolanalisis.app.ui.screens.NewMatchScreen
+import com.futbolanalisis.app.ui.screens.ShareScreen
 import com.futbolanalisis.app.ui.screens.MatchScreen
 import com.futbolanalisis.app.ui.screens.ProfileScreen
 import com.futbolanalisis.app.ui.screens.CalibrationScreen
@@ -34,7 +36,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         if (savedInstanceState == null) handleShare(intent)
         setContent { FutbolTheme { App(vm) } }
     }
@@ -83,8 +88,12 @@ private fun App(vm: AppViewModel) {
         state.openMatchId?.let {
             vm.consumeOpenMatch()
             vm.openMatch(it)
-            nav.navigate("match/$it")
+            nav.navigate("match/$it") { popUpTo("home") }
         }
+    }
+    // Recorrido leído: falta indicar equipos y fecha antes de analizarlo.
+    LaunchedEffect(state.pending) {
+        if (state.pending != null) nav.navigate("new") { launchSingleTop = true }
     }
     LaunchedEffect(state.routeConsentFor) {
         state.routeConsentFor?.let { routeConsent.launch(it.id) }
@@ -92,20 +101,32 @@ private fun App(vm: AppViewModel) {
 
     NavHost(nav, startDestination = "home") {
         composable("home") {
-            HomeScreen(
+            MainScreen(
                 state = state,
                 snackbar = snackbar,
                 onImportFile = { pickFile.launch(arrayOf("*/*")) },
                 onSample = vm::loadSample,
                 onOpen = { id -> vm.openMatch(id); nav.navigate("match/$id") },
+                onShare = { id -> vm.openMatch(id); nav.navigate("share/$id") },
                 onHealth = { nav.navigate("health") },
                 onProfile = { nav.navigate("profile") },
             )
+        }
+        composable("new") {
+            NewMatchScreen(
+                pending = state.pending,
+                defaultTeam = state.teamName,
+                busy = state.busy,
+                onConfirm = vm::confirmImport,
+                onCancel = { vm.cancelImport(); nav.popBackStack() },
+            )
+            androidx.activity.compose.BackHandler { vm.cancelImport(); nav.popBackStack() }
         }
         composable("match/{id}") { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable
             MatchScreen(
                 record = current?.takeIf { it.id == id },
+                matches = state.matches,
                 busy = state.busy,
                 onBack = { nav.popBackStack() },
                 onOptions = { transform -> vm.updateOptions(id, transform) },
@@ -114,7 +135,12 @@ private fun App(vm: AppViewModel) {
                 onTrim = { nav.navigate("trim/$id") },
                 onCalibrate = { nav.navigate("calibrate/$id") },
                 onLog = { nav.navigate("log/$id") },
+                onShare = { nav.navigate("share/$id") },
             )
+        }
+        composable("share/{id}") { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            ShareScreen(record = current?.takeIf { it.id == id }, profile = state.profile, onMessage = vm::showMessage, onBack = { nav.popBackStack() })
         }
         composable("log/{id}") { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable

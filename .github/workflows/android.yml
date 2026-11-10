@@ -22,6 +22,18 @@ jobs:
         run: ./gradlew :core:test
       - name: Compilar APK
         run: ./gradlew :app:assembleDebug :app:assembleRelease
+      # En las ramas de trabajo se guardan capturas de las pantallas para revisarlas.
+      - name: Capturas de pantalla
+        if: github.ref != 'refs/heads/main' && github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          ./gradlew :app:testDebugUnitTest
+          mkdir -p docs/screenshots
+          cp app/build/screenshots/*.png docs/screenshots/
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Capturas de pantalla de la interfaz [skip ci]" && git push || true
       - uses: actions/upload-artifact@v4
         with:
           name: futbol-analisis-apk

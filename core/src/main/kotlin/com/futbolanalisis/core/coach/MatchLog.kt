@@ -5,7 +5,11 @@ import kotlinx.serialization.Serializable
 /** Registro manual del partido: lo que el GPS no ve. */
 @Serializable
 data class MatchLog(
+    /** Nombre del equipo propio. */
+    val ownTeam: String = "",
     val opponent: String = "",
+    /** Fecha del partido indicada a mano (ms epoch); null = la del registro GPS. */
+    val matchDateMs: Long? = null,
     val goalsFor: Int? = null,
     val goalsAgainst: Int? = null,
     val goals: Int = 0,
@@ -41,6 +45,17 @@ data class MatchLog(
         }
 
     val isEmpty: Boolean get() = this == MatchLog()
+
+    /** true si hay algo más que equipos y fecha (acciones, resultado, sensaciones...). */
+    val hasDetails: Boolean get() = copy(ownTeam = "", opponent = "", matchDateMs = null) != MatchLog()
+
+    /** "Mi equipo vs Rival" si se conocen los nombres. */
+    val fixture: String?
+        get() = when {
+            ownTeam.isNotBlank() && opponent.isNotBlank() -> "${ownTeam.trim()} vs ${opponent.trim()}"
+            opponent.isNotBlank() -> "vs ${opponent.trim()}"
+            else -> null
+        }
 
     companion object {
         val POSITIONS = listOf(

@@ -13,8 +13,8 @@ android {
         applicationId = "com.futbolanalisis.app"
         minSdk = 26 // requisito de Health Connect
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -36,6 +36,17 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                // Las pruebas de capturas guardan los PNG en app/build/screenshots.
+                it.systemProperty("roborazzi.test.record", "true")
+                it.maxHeapSize = "3g"
+            }
+        }
     }
 
     packaging {
@@ -64,6 +75,15 @@ dependencies {
 
     // Mapa satelital para calibrar la cancha (tiles de Esri World Imagery, sin API key).
     implementation("org.osmdroid:osmdroid-android:6.1.20")
+
+    // Capturas de pantalla de la interfaz sin emulador (Robolectric + Roborazzi).
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.32.2")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.32.2")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

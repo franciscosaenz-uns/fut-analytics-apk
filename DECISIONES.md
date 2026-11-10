@@ -93,3 +93,37 @@
    vertical y lateral, área, dirección de sprints) comparada con 33 perfiles aproximados de jugadores actuales.
    Los perfiles son estimaciones a partir de mapas de calor y descripciones de rol públicas, no datos oficiales de tracking;
    la app lo aclara. Similitud = exp(−distancia ponderada²).
+
+# Decisiones de la v0.4
+
+Investigación de competencia y oportunidades en [docs/COMPETENCIA.md](docs/COMPETENCIA.md).
+
+1. **Rediseño completo con identidad propia**: tema oscuro fijo (fondo casi negro, acento lima), números grandes en fuente
+   condensada, tarjetas con borde fino. Se dejó de usar el color dinámico de Android para que la app se vea igual en
+   todos los teléfonos. Navegación inferior con cuatro secciones: Inicio, Partidos, Progreso y Perfil.
+2. **Inicio**: resumen de rendimiento general (índice medio de los últimos 5 partidos, forma, radar de atributos, totales)
+   y tarjeta del último partido con sus diferencias frente al promedio. Botón fijo "Agregar partido".
+3. **Agregar partido en dos pasos**: primero el origen (archivo, Health Connect o ejemplo) y después una pantalla para
+   escribir equipo propio, rival, fecha, resultado y posición. La fecha se toma del registro GPS y solo se cambia si
+   hace falta. El equipo propio se recuerda para el siguiente partido. Los archivos compartidos desde Zepp pasan por la
+   misma pantalla. El nombre del partido se arma solo ("Equipo vs Rival").
+4. **Renombrar tocando el nombre** del partido en la barra superior; se edita ahí mismo.
+5. **Índice de rendimiento (0-99)** con cinco atributos: Velocidad, Resistencia, Intensidad, Explosividad y Aguante.
+   Cada uno sitúa tus datos en una escala de referencia que va del fútbol recreativo al profesional (detalle en
+   METRICAS.md). Es orientativo: su mejor uso es compararte contigo mismo.
+6. **Comparación entre partidos basada en datos**: 16 métricas, contra tu promedio o contra otro partido, con opción
+   "por 90 minutos" para que un partido corto no salga perjudicado. Una diferencia solo se marca como mejora o caída si
+   supera el margen de ruido de esa métrica (3-15 % según el caso). Récords personales y frases automáticas con lo más
+   destacado.
+7. **Umbrales absolutos para comparar**: con las zonas adaptativas, el umbral de sprint cambia en cada partido, así que
+   los sprints no son comparables entre partidos. Para las comparaciones se añadieron distancias con umbral fijo
+   (≥ 14,4 y ≥ 19,8 km/h). Los partidos anteriores se re-analizan solos la primera vez que se abre la v0.4.
+8. **Mapa de calor sobre vista satelital**: la app descarga las imágenes de Esri una vez, las gira y recorta para que
+   coincidan con la cancha (ataque hacia la derecha) y las guarda en el teléfono. Con cancha calibrada por esquinas
+   encaja exacto y se activa por defecto; con calibración automática la foto muestra la zona recorrida y la app sugiere
+   calibrar.
+9. **Imagen para compartir** en tres formatos (publicación 4:5, historia 9:16 y cuadrada), a 1080 px, con marcador,
+   mapa de calor (satelital o dibujado), índice, cuatro datos y atributos. Se comparte por el menú del sistema o se
+   guarda en la galería (Android 10+). El dibujo vive en el motor (`core/share`) sobre un lienzo abstracto, de modo que
+   se puede generar y revisar sin teléfono (`./gradlew :core:demo`).
+10. **Mapa de calor más suave** (interpolación B-spline y paleta nueva), el mismo código en pantalla y en la imagen.
