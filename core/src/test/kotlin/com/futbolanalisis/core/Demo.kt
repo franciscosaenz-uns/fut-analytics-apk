@@ -21,6 +21,19 @@ fun main(args: Array<String>) {
     File(out, "report.json").writeText(MatchAnalyzer.json.encodeToString(MatchReport.serializer(), report))
     File(out, "summary.txt").writeText(TextSummary.of(report))
     ImageIO.write(renderHeatmap(report), "png", File(out, "heatmap.png"))
+    // Imagen para compartir en los tres formatos (sin foto satelital y con un fondo de prueba).
+    val data = sampleShareData(report)
+    for (f in com.futbolanalisis.core.share.ShareFormat.entries) {
+        val plain = AwtSurface(f.width, f.height)
+        com.futbolanalisis.core.share.ShareCard.draw(plain, data)
+        ImageIO.write(plain.image, "png", File(out, "share_${f.name.lowercase()}.png"))
+        val sat = AwtSurface(f.width, f.height, fakeSatellite())
+        com.futbolanalisis.core.share.ShareCard.draw(sat, data)
+        ImageIO.write(sat.image, "png", File(out, "share_${f.name.lowercase()}_sat.png"))
+    }
+    val k = com.futbolanalisis.core.insights.MatchKpis.of(report)
+    println("KPIs: $k")
+    println("Índice: ${com.futbolanalisis.core.insights.PerformanceScore.of(k)}")
     println(TextSummary.of(report))
     println("Archivos en ${out.absolutePath}")
 }
@@ -74,4 +87,21 @@ private fun ramp(v: Double): Color {
         }
     }
     return stops.last().second
+}
+
+/** Textura verde con ruido que imita una foto aérea, solo para previsualizar el diseño. */
+private fun fakeSatellite(): BufferedImage {
+    val w = 585; val h = 400
+    val img = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+    val rnd = java.util.Random(3)
+    for (y in 0 until h) for (x in 0 until w) {
+        val stripe = if ((x / 45) % 2 == 0) 8 else 0
+        val n = rnd.nextInt(18)
+        img.setRGB(x, y, Color(52 + n, 96 + stripe + n, 48 + n / 2).rgb)
+    }
+    val g = img.createGraphics()
+    g.color = Color(225, 225, 215, 200); g.stroke = BasicStroke(2f)
+    g.drawRect(30, 30, w - 60, h - 60); g.drawLine(w / 2, 30, w / 2, h - 30); g.drawOval(w / 2 - 45, h / 2 - 45, 90, 90)
+    g.dispose()
+    return img
 }

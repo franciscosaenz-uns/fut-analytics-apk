@@ -34,10 +34,18 @@ data class AdvancedMetrics(
     /** Distancia recorrida en cada tercio (defensivo, medio, ofensivo). Se rellena con el análisis táctico. */
     val distanceByThirdM: List<Double> = emptyList(),
     val sprintsEndingInFinalThird: Int = 0,
+    /**
+     * Distancias con umbrales absolutos (no dependen del modo de zonas), para poder comparar
+     * partidos entre sí: carrera ≥ 14,4 km/h y alta velocidad ≥ 19,8 km/h.
+     */
+    val absRunDistanceM: Double? = null,
+    val absHighSpeedDistanceM: Double? = null,
 )
 
 object AdvancedMetricsAnalyzer {
     private const val RHIE_MAX_GAP_S = 21.0
+    const val ABS_RUN_MS = 14.4 / 3.6
+    const val ABS_HSR_MS = 19.8 / 3.6
 
     fun analyze(
         samples: List<Sample>,
@@ -55,12 +63,15 @@ object AdvancedMetricsAnalyzer {
         val dist = DoubleArray(total)
         val hsrDist = DoubleArray(total)
         var work = 0.0; var rest = 0.0
+        var absRun = 0.0; var absHsr = 0.0
         for (s in samples) {
             if (s.dtS <= 0) continue
             val sec = clock.playSeconds(s.point.timeMs)?.toInt()?.coerceIn(0, total - 1) ?: continue
             dist[sec] += s.distanceM
             if (s.speedMs >= hsr) hsrDist[sec] += s.distanceM
             if (s.speedMs >= run) work += s.dtS else rest += s.dtS
+            if (s.speedMs >= ABS_RUN_MS) absRun += s.distanceM
+            if (s.speedMs >= ABS_HSR_MS) absHsr += s.distanceM
         }
         val peaks = listOf(1, 3, 5, 10).mapNotNull { w -> peak(dist, hsrDist, w) }
 
@@ -103,6 +114,8 @@ object AdvancedMetricsAnalyzer {
             efficiencyByPeriod = eff,
             decouplingPct = decoupling,
             sessionRpeLoad = rpe?.let { it * physical.playingTimeS / 60 },
+            absRunDistanceM = absRun,
+            absHighSpeedDistanceM = absHsr,
         )
     }
 
