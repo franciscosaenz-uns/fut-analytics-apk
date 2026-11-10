@@ -49,3 +49,24 @@ Combina tres reservas (0-100):
 3. **Cardiaca** (si hay FC): se vacía sosteniendo > 85% de FCmáx.
 
 Pesos: 45/35/20 con FC, 55/45 sin FC. Es un modelo orientativo, no un diagnóstico.
+
+## Índice de rendimiento (v0.4)
+Cinco atributos de 0 a 99. Cada dato se sitúa linealmente entre una referencia baja (≈ 30 puntos, fútbol recreativo) y
+una alta (≈ 95, profesional). Los datos de volumen se normalizan a 90 minutos.
+
+| Atributo | Peso | Datos (referencia baja → alta) |
+|---|---|---|
+| Velocidad | 20 % | Velocidad máxima 18 → 32 km/h (70 %); distancia ≥ 19,8 km/h 0 → 700 m (30 %) |
+| Resistencia | 25 % | Ritmo 55 → 120 m/min (70 %); distancia ≥ 14,4 km/h 0 → 2200 m (30 %) |
+| Intensidad | 25 % | HMLD 200 → 2200 m (50 %); pico de 1 minuto 90 → 190 m/min (25 %); potencia metabólica 5 → 11 W/kg (25 %) |
+| Explosividad | 15 % | Aceleraciones + frenadas 8 → 70 por 90' (umbral 2 m/s² con GPS de muñeca) |
+| Aguante | 15 % | Índice de fatiga −40 → +5 % (40 %); 2º tiempo vs 1º −25 → +5 % (30 %); energía final 15 → 80 % (30 %) |
+
+Niveles: < 52 en construcción, 52-65 amateur, 66-77 competitivo, 78-87 avanzado, 88+ élite.
+Las referencias altas salen de valores típicos de fútbol profesional (≈ 110-120 m/min, 30-33 km/h); las de explosividad
+están ajustadas a lo que mide un reloj a 1 Hz, no a un GPS de chaleco. Habrá que afinarlas con partidos reales.
+
+## Comparación entre partidos (v0.4)
+Una diferencia cuenta como real solo si supera el margen de ruido de la métrica: 3 % en velocidad máxima, 4 % en ritmo y
+picos, 5-8 % en distancias, 10-15 % en conteos (sprints, aceleraciones). FC media y TRIMP se muestran sin juicio
+(más alto no es mejor ni peor).
