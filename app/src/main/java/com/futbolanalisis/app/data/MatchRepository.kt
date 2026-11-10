@@ -5,6 +5,8 @@ import com.futbolanalisis.core.AnalysisOptions
 import com.futbolanalisis.core.MatchAnalyzer
 import com.futbolanalisis.core.MatchReport
 import com.futbolanalisis.core.coach.MatchLog
+import com.futbolanalisis.core.insights.MatchKpis
+import com.futbolanalisis.core.insights.PerformanceScore
 import com.futbolanalisis.core.model.HeartRateSample
 import com.futbolanalisis.core.model.PlayerProfile
 import com.futbolanalisis.core.model.Track
@@ -31,7 +33,10 @@ data class MatchRecord(
     val options: AnalysisOptions = AnalysisOptions(),
     val report: MatchReport,
     val log: MatchLog = MatchLog(),
-)
+) {
+    /** Fecha del partido: la indicada a mano o, si no, la del registro GPS. */
+    val dateMs: Long get() = log.matchDateMs ?: report.startMs
+}
 
 @Serializable
 data class MatchSummary(
@@ -49,7 +54,28 @@ data class MatchSummary(
     val assists: Int = 0,
     val result: String? = null,
     val opponent: String = "",
-)
+    val ownTeam: String = "",
+    val goalsFor: Int? = null,
+    val goalsAgainst: Int? = null,
+    /** Indicadores para comparar partidos sin abrir cada registro. */
+    val kpis: MatchKpis? = null,
+    val score: PerformanceScore? = null,
+) {
+    val fixture: String?
+        get() = when {
+            ownTeam.isNotBlank() && opponent.isNotBlank() -> "$ownTeam vs $opponent"
+            opponent.isNotBlank() -> "vs $opponent"
+            else -> null
+        }
+
+    /** 'V', 'E' o 'D' si se conoce el resultado. */
+    val outcome: Char?
+        get() {
+            val f = goalsFor ?: return null
+            val a = goalsAgainst ?: return null
+            return if (f > a) 'V' else if (f < a) 'D' else 'E'
+        }
+}
 
 /**
  * Almacenamiento local en archivos JSON (un archivo por partido + un índice).
@@ -100,6 +126,7 @@ class MatchRepository(context: Context) {
         externalHr: List<HeartRateSample>,
         wellness: WellnessSnapshot?,
         title: String?,
+        log: MatchLog = MatchLog(),
     ): MatchRecord = withContext(Dispatchers.Default) {
         val report = MatchAnalyzer.analyze(track, profile, options, externalHr, wellness, title)
         val record = MatchRecord(
@@ -111,9 +138,24 @@ class MatchRepository(context: Context) {
             wellness = wellness,
             options = options,
             report = report,
+            log = log,
         )
         save(record)
         record
+    }
+
+    /**
+     * Los partidos guardados por versiones anteriores no tienen indicadores en el índice:
+     * se re-analizan una vez para poder compararlos. Devuelve cuántos se actualizaron.
+     */
+    suspend fun migrate(profile: PlayerProfile): Int {
+        val pending = list().filter { it.kpis?.runDistanceM == null || it.score == null }
+        var done = 0
+        for (m in pending) {
+            val old = get(m.id) ?: continue
+            if (runCatching { reanalyze(m.id, profile, old.options) }.getOrNull() != null) done++
+        }
+        return done
     }
 
     /** Re-analiza con otras opciones (dirección de ataque, umbrales, periodos) o con otro perfil. */
@@ -134,7 +176,9 @@ class MatchRepository(context: Context) {
         val report = if (options != old.options) withContext(Dispatchers.Default) {
             MatchAnalyzer.analyze(old.track, profile, options, old.externalHeartRate, old.wellness, old.title)
         } else old.report
-        val updated = old.copy(options = options, report = report, log = log)
+        // Si el nombre era el automático ("Equipo vs Rival"), sigue a los nombres de los equipos.
+        val title = if (old.title == old.log.fixture) log.fixture ?: old.title else old.title
+        val updated = old.copy(title = title, options = options, report = report.copy(title = title), log = log)
         save(updated)
         return updated
     }
@@ -151,10 +195,11 @@ class MatchRepository(context: Context) {
 
     private suspend fun save(record: MatchRecord) = withContext(Dispatchers.IO) {
         File(dir, "${record.id}.json").writeText(json.encodeToString(MatchRecord.serializer(), record))
+        val kpis = MatchKpis.of(record.report)
         val summary = MatchSummary(
             id = record.id,
             title = record.title,
-            startMs = record.report.startMs,
+            startMs = record.dateMs,
             distanceM = record.report.physical.totalDistanceM,
             playingTimeS = record.report.physical.playingTimeS,
             role = record.report.tactical.estimatedRole,
@@ -165,7 +210,12 @@ class MatchRepository(context: Context) {
             goals = record.log.goals,
             assists = record.log.assists,
             result = record.log.result,
-            opponent = record.log.opponent,
+            opponent = record.log.opponent.trim(),
+            ownTeam = record.log.ownTeam.trim(),
+            goalsFor = record.log.goalsFor,
+            goalsAgainst = record.log.goalsAgainst,
+            kpis = kpis,
+            score = PerformanceScore.of(kpis),
         )
         writeIndex(list().filterNot { it.id == record.id } + summary)
     }
@@ -192,6 +242,11 @@ class ProfileStore(context: Context) {
         ?: PlayerProfile()
 
     fun save(p: PlayerProfile) = prefs.edit().putString("profile", json.encodeToString(PlayerProfile.serializer(), p)).apply()
+
+    /** Último nombre de equipo propio usado, para proponerlo en el siguiente partido. */
+    var teamName: String
+        get() = prefs.getString("teamName", "") ?: ""
+        set(v) = prefs.edit().putString("teamName", v).apply()
 
     var zoneMode: ZoneMode
         get() = prefs.getString("zoneMode", null)?.let { runCatching { ZoneMode.valueOf(it) }.getOrNull() }

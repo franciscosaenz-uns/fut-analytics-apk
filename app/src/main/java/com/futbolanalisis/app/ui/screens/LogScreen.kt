@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.futbolanalisis.app.data.MatchRecord
 import com.futbolanalisis.app.ui.components.SectionTitle
+import com.futbolanalisis.app.ui.dateOnly
 import com.futbolanalisis.core.coach.MatchLog
 
 private val rpeText = listOf(
@@ -60,7 +61,29 @@ fun LogScreen(record: MatchRecord?, onSave: (MatchLog) -> Unit, onBack: () -> Un
         val number = KeyboardOptions(keyboardType = KeyboardType.Number)
         Column(Modifier.padding(padding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
             SectionTitle("Partido")
-            OutlinedTextField(log.opponent, { log = log.copy(opponent = it) }, label = { Text("Rival") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(log.ownTeam, { log = log.copy(ownTeam = it) }, label = { Text("Tu equipo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(log.opponent, { log = log.copy(opponent = it) }, label = { Text("Rival") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            var showPicker by remember { mutableStateOf(false) }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Fecha: " + (log.matchDateMs ?: record.report.startMs).dateOnly())
+                    Text(if (log.matchDateMs == null) "Tomada del registro del reloj" else "Indicada a mano", style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.TextButton(onClick = { showPicker = true }) { Text("Cambiar") }
+            }
+            if (showPicker) {
+                val pickerState = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = localDayToPickerMillis(log.matchDateMs ?: record.report.startMs))
+                androidx.compose.material3.DatePickerDialog(
+                    onDismissRequest = { showPicker = false },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            pickerState.selectedDateMillis?.let { log = log.copy(matchDateMs = pickerMillisToLocalNoon(it)) }
+                            showPicker = false
+                        }) { Text("Aceptar") }
+                    },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { log = log.copy(matchDateMs = null); showPicker = false }) { Text("Usar la del reloj") } },
+                ) { androidx.compose.material3.DatePicker(state = pickerState) }
+            }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     log.goalsFor?.toString() ?: "", { log = log.copy(goalsFor = it.filter(Char::isDigit).toIntOrNull()) },

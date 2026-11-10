@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,28 +26,29 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import com.futbolanalisis.app.ui.theme.Brand
+import com.futbolanalisis.app.ui.theme.numberStyle
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = modifier.padding(top = 16.dp, bottom = 8.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = modifier.padding(top = 20.dp, bottom = 10.dp))
 }
 
 @Composable
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier, hint: String? = null) {
-    Card(modifier) {
-        Column(Modifier.padding(12.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
+    Panel(modifier, padding = 12.dp) {
+        Overline(label)
+        Text(value, style = numberStyle(22), color = Brand.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Brand.Muted) }
     }
 }
 
 /** Fila de 2 o 3 tarjetas del mismo ancho. */
 @Composable
 fun StatRow(vararg tiles: Triple<String, String, String?>) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        tiles.forEach { (l, v, h) -> StatTile(l, v, Modifier.weight(1f), h) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        tiles.forEach { (l, v, h) -> StatTile(l, v, Modifier.weight(1f).fillMaxHeight(), h) }
     }
 }
 
@@ -55,7 +56,7 @@ fun StatRow(vararg tiles: Triple<String, String, String?>) {
 @Composable
 fun LabeledBar(label: String, fraction: Float, valueText: String, color: Color) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(110.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, modifier = Modifier.width(110.dp))
         Box(
             Modifier
                 .weight(1f)
@@ -76,7 +77,7 @@ fun LabeledBar(label: String, fraction: Float, valueText: String, color: Color) 
 }
 
 val zoneColors = listOf(
-    Color(0xFF90CAF9), Color(0xFF66BB6A), Color(0xFFFFEE58), Color(0xFFFFA726), Color(0xFFEF5350),
+    Color(0xFF4DA3FF), Color(0xFF3DDC97), Color(0xFFFFE53B), Color(0xFFFF9A3D), Color(0xFFFF5A5F),
 )
 
 /** Gráfico de barras simple (p. ej. metros por minuto). */
@@ -89,7 +90,7 @@ fun BarChart(values: List<Double>, color: Color, modifier: Modifier = Modifier, 
         val bw = size.width / values.size
         values.forEachIndexed { i, v ->
             val h = (v / maxV * size.height).toFloat()
-            drawRect(color, Offset(i * bw + bw * 0.1f, size.height - h), Size(bw * 0.8f, h))
+            drawRoundRect(color, Offset(i * bw + bw * 0.14f, size.height - h), Size(bw * 0.72f, h), cornerRadius = androidx.compose.ui.geometry.CornerRadius(bw * 0.2f))
         }
         dividerAt?.let { drawLine(outline, Offset(it * bw, 0f), Offset(it * bw, size.height), strokeWidth = 2f) }
     }
@@ -127,21 +128,21 @@ fun EnergyChart(
     markers: List<Int> = emptyList(),
     secondary: List<Pair<List<Double>, Color>> = emptyList(),
 ) {
-    val lineColor = MaterialTheme.colorScheme.onSurface
+    val lineColor = Brand.Accent
     val grid = MaterialTheme.colorScheme.outlineVariant
     Column(modifier) {
         Canvas(Modifier.fillMaxWidth().height(180.dp)) {
             if (values.size < 2) return@Canvas
             fun x(i: Int) = i * size.width / (values.size - 1)
             fun y(v: Double) = (size.height * (1 - v / 100)).toFloat()
-            drawRect(Color(0xFF66BB6A).copy(alpha = 0.16f), Offset(0f, 0f), Size(size.width, y(60.0)))
-            drawRect(Color(0xFFFFCA28).copy(alpha = 0.16f), Offset(0f, y(60.0)), Size(size.width, y(30.0) - y(60.0)))
-            drawRect(Color(0xFFEF5350).copy(alpha = 0.16f), Offset(0f, y(30.0)), Size(size.width, size.height - y(30.0)))
+            drawRect(Brand.Good.copy(alpha = 0.10f), Offset(0f, 0f), Size(size.width, y(60.0)))
+            drawRect(Brand.Warn.copy(alpha = 0.10f), Offset(0f, y(60.0)), Size(size.width, y(30.0) - y(60.0)))
+            drawRect(Brand.Bad.copy(alpha = 0.12f), Offset(0f, y(30.0)), Size(size.width, size.height - y(30.0)))
             for (m in 15 until values.size step 15) drawLine(grid, Offset(x(m), 0f), Offset(x(m), size.height), 1f)
             dividerAtMinute?.let { drawLine(lineColor.copy(alpha = 0.6f), Offset(x(it), 0f), Offset(x(it), size.height), 3f) }
             markers.forEach { m ->
                 val i = (m - 1).coerceIn(0, values.size - 1)
-                drawCircle(Color(0xFFE53935), 7f, Offset(x(i), y(values[i])))
+                drawCircle(Brand.Bad, 7f, Offset(x(i), y(values[i])))
             }
             secondary.forEach { (series, c) ->
                 val p = Path()

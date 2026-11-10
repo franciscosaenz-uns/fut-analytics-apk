@@ -2,7 +2,6 @@ package com.futbolanalisis.app.ui.screens
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,9 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -36,7 +33,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.futbolanalisis.app.data.MatchRecord
+import com.futbolanalisis.app.ui.components.BigStat
+import com.futbolanalisis.app.ui.components.Overline
+import com.futbolanalisis.app.ui.components.Panel
 import com.futbolanalisis.app.ui.components.SectionTitle
+import com.futbolanalisis.app.ui.theme.Brand
 import com.futbolanalisis.core.coach.Coach
 import com.futbolanalisis.core.coach.CoachTip
 import com.futbolanalisis.core.coach.Drill
@@ -62,42 +63,28 @@ private fun DrillType.color() = when (this) {
 
 @Composable
 fun LogCard(log: MatchLog, onEdit: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Registro del partido", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (log.isEmpty) {
-                        Text("Anota resultado, goles, asistencias y cómo te sentiste", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        Text(
-                            listOfNotNull(log.result, log.opponent.takeIf { it.isNotBlank() }?.let { "vs $it" }).joinToString(" ").ifBlank { "Partido" },
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-                FilledTonalButton(onClick = onEdit) { Text(if (log.isEmpty) "Registrar" else "Editar") }
+    Panel(Modifier.padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Overline("Registro del partido")
+                Text(
+                    if (log.hasDetails) "Tus acciones y sensaciones" else "Anota goles, asistencias y cómo te sentiste",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
-            if (!log.isEmpty) {
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LogStat("⚽", "${log.goals}", "goles")
-                    LogStat("🅰", "${log.assists}", "asist.")
-                    LogStat("🎯", "${log.shotsOnTarget}/${log.shots}", "tiros")
-                    log.rpe?.let { LogStat("💪", "$it/10", "RPE") }
-                    log.selfRating?.let { LogStat("⭐", "$it/10", "nota") }
-                }
-                if (log.notes.isNotBlank()) Text(log.notes, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-            }
+            FilledTonalButton(onClick = onEdit) { Text(if (log.hasDetails) "Editar" else "Registrar") }
         }
-    }
-}
-
-@Composable
-private fun LogStat(icon: String, value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("$icon $value", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (log.hasDetails) {
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth()) {
+                BigStat("Goles", "${log.goals}", Modifier.weight(1f))
+                BigStat("Asist.", "${log.assists}", Modifier.weight(1f))
+                BigStat("Tiros", "${log.shotsOnTarget}/${log.shots}", Modifier.weight(1f))
+                BigStat("RPE", log.rpe?.let { "$it" } ?: "—", Modifier.weight(1f))
+                BigStat("Nota", log.selfRating?.let { "$it" } ?: "—", Modifier.weight(1f))
+            }
+            if (log.notes.isNotBlank()) Text(log.notes, style = MaterialTheme.typography.bodySmall, color = Brand.Muted, modifier = Modifier.padding(top = 8.dp))
+        }
     }
 }
 
@@ -106,7 +93,7 @@ fun CoachTab(record: MatchRecord) {
     val coach = remember(record.report, record.log) { Coach.advise(record.report, record.log) }
 
     SectionTitle("Consejos para el próximo partido")
-    if (record.log.isEmpty) {
+    if (!record.log.hasDetails) {
         Text("Completa el registro del partido (pestaña Resumen) para recibir consejos más precisos.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -115,9 +102,9 @@ fun CoachTab(record: MatchRecord) {
     SectionTitle("Entrenamientos recomendados · ${coach.roleGroup.label}")
     var filter by rememberSaveable { mutableStateOf<DrillType?>(null) }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        AssistChip(onClick = { filter = null }, label = { Text(if (filter == null) "● Todos" else "Todos") })
+        FilterChip(filter == null, { filter = null }, label = { Text("Todos") })
         DrillType.entries.forEach { t ->
-            AssistChip(onClick = { filter = t }, label = { Text(if (filter == t) "● ${t.label}" else t.label) })
+            FilterChip(filter == t, { filter = t }, label = { Text(t.label) })
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -137,8 +124,8 @@ fun CoachTab(record: MatchRecord) {
 
 @Composable
 private fun TipCard(tip: CoachTip) {
-    Card(colors = CardDefaults.cardColors(containerColor = tip.area.color().copy(alpha = 0.08f))) {
-        Row(Modifier.fillMaxWidth().padding(12.dp)) {
+    Panel(padding = 12.dp) {
+        Row(Modifier.fillMaxWidth()) {
             Box(Modifier.width(4.dp).height(56.dp).background(tip.area.color(), RoundedCornerShape(2.dp)))
             Column(Modifier.padding(start = 12.dp)) {
                 Text(
@@ -155,8 +142,8 @@ private fun TipCard(tip: CoachTip) {
 @Composable
 private fun DrillCard(d: Drill) {
     var open by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth().clickable { open = !open }.animateContentSize()) {
-        Column(Modifier.padding(12.dp)) {
+    Panel(Modifier.animateContentSize(), onClick = { open = !open }, padding = 12.dp) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.background(d.type.color(), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                     Text(d.type.label, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
@@ -176,8 +163,8 @@ private fun DrillCard(d: Drill) {
 
 @Composable
 private fun ProCard(rank: Int, m: ProMatch) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Panel(padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
                 Text(m.player.name.split(" ").mapNotNull { it.firstOrNull() }.take(2).joinToString(""), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }

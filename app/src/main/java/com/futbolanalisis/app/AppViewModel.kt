@@ -32,12 +32,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
 
+/** Recorrido ya leído que espera los datos del partido (equipos, fecha) antes de analizarse. */
+data class PendingImport(val track: Track, val suggestedTitle: String?, val source: String)
+
+/** Lo que el usuario completa al agregar un partido. */
+data class NewMatchDetails(
+    val ownTeam: String = "",
+    val rival: String = "",
+    /** null = usar la fecha del registro GPS. */
+    val dateMs: Long? = null,
+    val goalsFor: Int? = null,
+    val goalsAgainst: Int? = null,
+    val position: String = "",
+    val title: String = "",
+)
+
 data class UiState(
     val matches: List<MatchSummary> = emptyList(),
     val busy: Boolean = false,
     val message: String? = null,
     /** Partido recién creado, para navegar a él. */
     val openMatchId: String? = null,
+    val pending: PendingImport? = null,
+    val teamName: String = "",
+    /** true cuando ya se leyó la lista de partidos (evita mostrar el estado vacío al arrancar). */
+    val loaded: Boolean = false,
     val profile: PlayerProfile = PlayerProfile(),
     val zoneMode: ZoneMode = ZoneMode.ADAPTIVE,
     val pitches: List<SavedPitch> = emptyList(),
@@ -55,7 +74,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val health = HealthConnectManager(app)
 
     private val _state = MutableStateFlow(
-        UiState(profile = profileStore.load(), zoneMode = profileStore.zoneMode, pitches = profileStore.pitches),
+        UiState(profile = profileStore.load(), zoneMode = profileStore.zoneMode, pitches = profileStore.pitches, teamName = profileStore.teamName),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -63,12 +82,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val current: StateFlow<MatchRecord?> = _current.asStateFlow()
 
     init {
-        refreshMatches()
+        viewModelScope.launch {
+            _state.update { it.copy(matches = repo.list(), loaded = true) }
+            // Partidos de versiones anteriores: se completan sus indicadores una sola vez.
+            if (_state.value.matches.any { it.kpis?.runDistanceM == null || it.score == null }) {
+                _state.update { it.copy(busy = true) }
+                runCatching { repo.migrate(_state.value.profile) }
+                _state.update { it.copy(matches = repo.list(), busy = false) }
+            }
+        }
         refreshHealth()
     }
 
     fun refreshMatches() = viewModelScope.launch {
-        _state.update { it.copy(matches = repo.list()) }
+        _state.update { it.copy(matches = repo.list(), loaded = true) }
     }
 
     fun refreshHealth() = viewModelScope.launch {
@@ -83,6 +110,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun showMessage(text: String) = _state.update { it.copy(message = text) }
     fun consumeMessage() = _state.update { it.copy(message = null) }
     fun consumeOpenMatch() = _state.update { it.copy(openMatchId = null) }
 
@@ -111,8 +139,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ctx.contentResolver.openInputStream(uri)?.use { TrackImporter.parse(it, name) }
                 ?: error("No se pudo abrir el archivo")
         }
-        createMatch(track, title = track.name ?: name?.substringBeforeLast('.'))
+        _state.update { it.copy(pending = PendingImport(track, track.name ?: name?.substringBeforeLast('.'), "Archivo ${track.source.name}")) }
     }
+
+    /** El usuario confirmó los datos del partido: se analiza y se abre. */
+    fun confirmImport(details: NewMatchDetails) = runBusy {
+        val pending = _state.value.pending ?: return@runBusy
+        val trackDay = java.time.Instant.ofEpochMilli(pending.track.startMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        val chosenDay = details.dateMs?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+        val log = com.futbolanalisis.core.coach.MatchLog(
+            ownTeam = details.ownTeam.trim(),
+            opponent = details.rival.trim(),
+            matchDateMs = details.dateMs?.takeIf { chosenDay != trackDay },
+            goalsFor = details.goalsFor,
+            goalsAgainst = details.goalsAgainst,
+            positionPlayed = details.position,
+        )
+        val title = details.title.trim().ifBlank { log.fixture ?: pending.suggestedTitle ?: "Partido" }
+        if (details.ownTeam.isNotBlank()) {
+            profileStore.teamName = details.ownTeam.trim()
+            _state.update { it.copy(teamName = details.ownTeam.trim()) }
+        }
+        createMatch(pending.track, title, log)
+        _state.update { it.copy(pending = null) }
+    }
+
+    fun cancelImport() = _state.update { it.copy(pending = null) }
 
     fun loadSample() = runBusy {
         val ctx = getApplication<Application>()
@@ -122,7 +174,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importSession(session: HcSession) = runBusy {
         when (val r = health.readRoute(session.id)) {
-            is RouteResult.Ok -> createMatch(r.track, title = session.title ?: "Partido ${session.start}")
+            is RouteResult.Ok -> _state.update { it.copy(pending = PendingImport(r.track, session.title, "Health Connect")) }
             RouteResult.ConsentRequired -> _state.update { it.copy(routeConsentFor = session) }
             RouteResult.NoRoute -> _state.update {
                 it.copy(message = "Esta sesión no tiene ruta GPS en Health Connect. Exporta el entrenamiento como GPX desde Zepp o Strava e impórtalo.")
@@ -140,20 +192,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         runBusy {
             when (val r = health.routeToTrack(route, session.title)) {
-                is RouteResult.Ok -> createMatch(r.track, title = session.title ?: "Partido")
+                is RouteResult.Ok -> _state.update { it.copy(pending = PendingImport(r.track, session.title, "Health Connect")) }
                 else -> _state.update { it.copy(message = "La ruta tiene muy pocos puntos para analizarla.") }
             }
         }
     }
 
-    private suspend fun createMatch(track: Track, title: String?) {
+    private suspend fun createMatch(track: Track, title: String?, log: com.futbolanalisis.core.coach.MatchLog = com.futbolanalisis.core.coach.MatchLog()) {
         val hasHc = _state.value.hcAvailability == HcAvailability.AVAILABLE
         val start = Instant.ofEpochMilli(track.startMs)
         val end = Instant.ofEpochMilli(track.endMs)
         // Si el archivo no trae FC, se completa con Health Connect.
         val extHr = if (hasHc && track.heartRateSamples.size < 10) runCatching { health.heartRate(start, end) }.getOrDefault(emptyList()) else emptyList()
         val wellness = if (hasHc) runCatching { health.wellness(start) }.getOrNull() else null
-        val record = repo.create(track, _state.value.profile, options(track), extHr, wellness, title)
+        val options = options(track).copy(positionHint = log.positionPlayed.ifBlank { null })
+        val record = repo.create(track, _state.value.profile, options, extHr, wellness, title, log)
         _state.update { it.copy(matches = repo.list(), openMatchId = record.id) }
     }
 
