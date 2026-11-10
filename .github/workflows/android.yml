@@ -27,14 +27,17 @@ jobs:
           name: futbol-analisis-apk
           path: app/build/outputs/apk/**/*.apk
       - name: Copiar APK con nombre legible
+        id: ver
         if: github.ref == 'refs/heads/main'
-        run: cp app/build/outputs/apk/release/app-release.apk futbol-analisis.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk futbol-analisis.apk
+          echo "version=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
       # Publica el APK en la pagina de Releases para descargarlo directo desde el telefono.
       - uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v0.1.0
-          name: Fútbol Análisis v0.1.0
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Fútbol Análisis v${{ steps.ver.outputs.version }}
           prerelease: true
           body: APK compilado automáticamente desde main. Instálalo en Android permitiendo "instalar apps desconocidas".
           files: futbol-analisis.apk
