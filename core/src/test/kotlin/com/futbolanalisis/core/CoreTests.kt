@@ -165,6 +165,7 @@ class PeriodTest {
 }
 
 class PhysicalTest {
+    private val std = com.futbolanalisis.core.physical.PhysicalConfig(zoneMode = com.futbolanalisis.core.physical.ZoneMode.STANDARD)
     private fun straight(speedMs: Double, seconds: Int, t0: Long = 0): List<TrackPoint> =
         (0..seconds).map { TrackPoint(t0 + it * 1000L, 40.0 + it * speedMs / 111_195.0, -3.0) }
 
@@ -172,7 +173,7 @@ class PhysicalTest {
     fun constantRunIsMeasuredAndZoned() {
         val pts = straight(5.0, 100) // 18 km/h -> zona "Carrera"
         val periods = listOf(Period(1, pts.first().timeMs, pts.last().timeMs))
-        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods)
+        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods, std)
         assertTrue(abs(r.totalDistanceM - 500) < 2, "distancia ${r.totalDistanceM}")
         assertTrue(r.distanceByZoneM[2] > 495)
         assertTrue(abs(r.maxSpeedKmh - 18) < 0.2)
@@ -187,7 +188,7 @@ class PhysicalTest {
         val after = sprint.last().let { s -> (1..30).map { TrackPoint(s.timeMs + it * 1000L, s.lat + it * 1.5 / 111_195.0, -3.0) } }
         val pts = walk + sprint + after
         val periods = listOf(Period(1, pts.first().timeMs, pts.last().timeMs))
-        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods)
+        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods, std)
         assertEquals(1, r.sprints.size)
         assertTrue(r.sprints[0].maxSpeedKmh > 25.2)
         assertTrue(r.accelerations >= 1)
@@ -199,7 +200,7 @@ class PhysicalTest {
         val pts = straight(3.0, 60).toMutableList()
         pts[30] = pts[30].copy(lat = pts[30].lat + 0.001) // salto de ~111 m
         val periods = listOf(Period(1, pts.first().timeMs, pts.last().timeMs))
-        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods)
+        val r = PhysicalAnalyzer.analyze(PhysicalAnalyzer.clean(pts, periods), periods, std)
         assertTrue(abs(r.totalDistanceM - 180) < 3, "distancia ${r.totalDistanceM}")
         assertTrue(r.maxSpeedKmh < 12)
     }

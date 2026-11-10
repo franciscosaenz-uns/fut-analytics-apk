@@ -17,7 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -30,16 +30,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.futbolanalisis.core.model.PlayerProfile
+import com.futbolanalisis.core.physical.ZoneMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(profile: PlayerProfile, amateurZones: Boolean, onSave: (PlayerProfile, Boolean) -> Unit, onBack: () -> Unit) {
+fun ProfileScreen(profile: PlayerProfile, zoneMode: ZoneMode, onSave: (PlayerProfile, ZoneMode) -> Unit, onBack: () -> Unit) {
     var name by remember { mutableStateOf(profile.name) }
     var age by remember { mutableStateOf(profile.age.toString()) }
     var maxHr by remember { mutableStateOf(profile.maxHeartRate?.toString() ?: "") }
     var restHr by remember { mutableStateOf(profile.restingHeartRate?.toString() ?: "") }
     var weight by remember { mutableStateOf(profile.weightKg?.toString() ?: "") }
-    var amateur by remember { mutableStateOf(amateurZones) }
+    var mode by remember { mutableStateOf(zoneMode) }
     val number = KeyboardOptions(keyboardType = KeyboardType.Number)
 
     Scaffold(topBar = {
@@ -63,15 +64,22 @@ fun ProfileScreen(profile: PlayerProfile, amateurZones: Boolean, onSave: (Player
             )
             OutlinedTextField(restHr, { restHr = it.filter(Char::isDigit) }, label = { Text("FC en reposo (opcional)") }, keyboardOptions = number, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Peso en kg (opcional)") }, keyboardOptions = number, modifier = Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Umbrales de velocidad amateur", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        if (amateur) "Sprint > 21 km/h, alta intensidad > 16 km/h" else "Profesional: sprint > 25.2 km/h, alta intensidad > 19.8 km/h",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+            Text("Umbrales de velocidad", style = MaterialTheme.typography.titleSmall)
+            ZoneMode.entries.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    RadioButton(selected = mode == m, onClick = { mode = m })
+                    Column(Modifier.weight(1f)) {
+                        Text(m.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            when (m) {
+                                ZoneMode.ADAPTIVE -> "Recomendado. Sprint > 85% y alta intensidad > 70% de tu velocidad máxima en cada partido."
+                                ZoneMode.STANDARD -> "Sprint > 25,2 km/h, alta intensidad > 19,8 km/h."
+                                ZoneMode.AMATEUR -> "Sprint > 21 km/h, alta intensidad > 16 km/h."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
-                Switch(amateur, { amateur = it })
             }
             Button(
                 onClick = {
@@ -83,7 +91,7 @@ fun ProfileScreen(profile: PlayerProfile, amateurZones: Boolean, onSave: (Player
                             restingHeartRate = restHr.toIntOrNull()?.takeIf { it in 30..120 },
                             weightKg = weight.toDoubleOrNull(),
                         ),
-                        amateur,
+                        mode,
                     )
                     onBack()
                 },

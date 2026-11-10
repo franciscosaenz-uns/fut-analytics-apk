@@ -65,6 +65,20 @@ data class PitchCalibration(
 
     fun withAttackFlipped(flipped: Boolean) = copy(attackFlipped = flipped)
 
+    /** Coordenada geográfica de un punto de la cancha (inversa de [toPitch], sin rotación de ataque). */
+    fun toLatLon(p: PitchPoint): Pair<Double, Double> {
+        val det = m00 * m11 - m01 * m10
+        val x = p.x - offX; val y = p.y - offY
+        val lx = (m11 * x - m01 * y) / det
+        val ly = (-m10 * x + m00 * y) / det
+        return projection.toLatLon(Vec2(lx, ly))
+    }
+
+    /** Las 4 esquinas de la cancha (lat, lon), en orden, para dibujarla sobre el mapa. */
+    fun cornersLatLon(): List<Pair<Double, Double>> = listOf(
+        PitchPoint(0.0, 0.0), PitchPoint(dims.length, 0.0), PitchPoint(dims.length, dims.width), PitchPoint(0.0, dims.width),
+    ).map { toLatLon(it) }
+
     companion object {
         /**
          * Calibración automática. El eje principal del recorrido (PCA) se toma como el largo
@@ -137,6 +151,36 @@ data class PitchCalibration(
                 offX = 0.0, offY = 0.0,
                 dims = dims, method = CalibrationMethod.CORNERS,
             )
+        }
+
+        /**
+         * Calibración con tres esquinas tocadas en el mapa en cualquier orden lógico:
+         * [a] y [b] en la misma línea de fondo, [c] en la otra línea de fondo, del mismo
+         * lateral que [a]. Corrige la orientación (izquierda/derecha) sola y, si
+         * [measureDims] es true, usa el tamaño real medido de la cancha.
+         */
+        fun fromThreeCorners(
+            a: Pair<Double, Double>,
+            b: Pair<Double, Double>,
+            c: Pair<Double, Double>,
+            measureDims: Boolean = true,
+            fallback: PitchDimensions = PitchDimensions(),
+        ): PitchCalibration {
+            val proj = LocalProjection(a.first, a.second)
+            val w = proj.toLocal(b.first, b.second)
+            val l = proj.toLocal(c.first, c.second)
+            val dims = if (measureDims) PitchDimensions(
+                length = Math.round(l.length() * 2) / 2.0,
+                width = Math.round(w.length() * 2) / 2.0,
+            ) else fallback
+            val cross = l.x * w.y - l.y * w.x
+            return if (cross > 0) {
+                fromCorners(a, b, c, dims)
+            } else {
+                // b está a la derecha de a: b es la esquina derecha y la rival derecha es b + l.
+                val rivalRight = proj.toLatLon(w + l)
+                fromCorners(b, a, rivalRight, dims)
+            }
         }
 
         internal fun percentile(sorted: List<Double>, pct: Double): Double {

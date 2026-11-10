@@ -25,11 +25,36 @@ data class SpeedZones(
     companion object {
         /** Umbrales más bajos, adecuados para fútbol amateur o veteranos. */
         val AMATEUR = SpeedZones(joggingKmh = 6.0, runningKmh = 12.0, highSpeedKmh = 16.0, sprintKmh = 21.0)
+
+        /** % de la velocidad máxima de referencia para cada umbral (modo adaptativo). */
+        const val PCT_JOG = 0.30
+        const val PCT_RUN = 0.55
+        const val PCT_HSR = 0.70
+        const val PCT_SPRINT = 0.85
+
+        fun adaptive(maxSpeedKmh: Double) = SpeedZones(
+            joggingKmh = round1(maxSpeedKmh * PCT_JOG),
+            runningKmh = round1(maxSpeedKmh * PCT_RUN),
+            highSpeedKmh = round1(maxSpeedKmh * PCT_HSR),
+            sprintKmh = round1(maxSpeedKmh * PCT_SPRINT),
+        )
+
+        private fun round1(v: Double) = Math.round(v * 10) / 10.0
     }
 }
 
 @Serializable
+enum class ZoneMode(val label: String) {
+    /** Umbrales como % de la velocidad máxima del propio jugador en el partido. */
+    ADAPTIVE("Adaptados al jugador"),
+    STANDARD("Estándar profesional"),
+    AMATEUR("Estándar amateur"),
+}
+
+@Serializable
 data class PhysicalConfig(
+    val zoneMode: ZoneMode = ZoneMode.ADAPTIVE,
+    /** Umbrales fijos; solo se usan con [ZoneMode.STANDARD]. */
     val zones: SpeedZones = SpeedZones(),
     /** Velocidad por encima de la cual un salto de GPS se descarta (~41 km/h). */
     val maxPlausibleSpeedMs: Double = 11.5,
@@ -78,6 +103,10 @@ data class Split(
 
 @Serializable
 data class PhysicalReport(
+    val zoneMode: ZoneMode = ZoneMode.STANDARD,
+    /** Velocidad máxima "real" usada como referencia (sin picos de GPS). */
+    val referenceMaxSpeedKmh: Double = 0.0,
+    val zonesUsed: SpeedZones = SpeedZones(),
     val totalDistanceM: Double,
     val playingTimeS: Double,
     val metersPerMinute: Double,
@@ -137,8 +166,31 @@ object PhysicalAnalyzer {
         return out
     }
 
-    fun analyze(samples: List<Sample>, periods: List<Period>, config: PhysicalConfig = PhysicalConfig()): PhysicalReport {
-        val zones = config.zones
+    /**
+     * Velocidad máxima de referencia robusta: el percentil 99.8 de la velocidad suavizada
+     * (≈ los 10 segundos más rápidos de un partido), para que un pico aislado de GPS no la infle.
+     */
+    fun referenceMaxSpeedKmh(samples: List<Sample>, config: PhysicalConfig = PhysicalConfig()): Double {
+        val speeds = samples.filter { it.dtS > 0 && it.dtS <= config.maxSampleGapS }.map { it.speedMs * 3.6 }.sorted()
+        if (speeds.isEmpty()) return 0.0
+        val idx = ((speeds.size - 1) * 0.998).toInt()
+        return speeds[idx]
+    }
+
+    fun resolveZones(samples: List<Sample>, config: PhysicalConfig): Pair<SpeedZones, Double> {
+        val ref = referenceMaxSpeedKmh(samples, config)
+        val zones = when (config.zoneMode) {
+            ZoneMode.STANDARD -> config.zones
+            ZoneMode.AMATEUR -> SpeedZones.AMATEUR
+            // Se acota a 18-36 km/h para que un registro casi quieto no genere umbrales absurdos.
+            ZoneMode.ADAPTIVE -> SpeedZones.adaptive(ref.coerceIn(18.0, 36.0))
+        }
+        return zones to ref
+    }
+
+    fun analyze(samples: List<Sample>, periods: List<Period>, baseConfig: PhysicalConfig = PhysicalConfig()): PhysicalReport {
+        val (zones, refMax) = resolveZones(samples, baseConfig)
+        val config = baseConfig.copy(zones = zones)
         val distByZone = DoubleArray(5)
         val timeByZone = DoubleArray(5)
         var total = 0.0
@@ -181,6 +233,9 @@ object PhysicalAnalyzer {
         } else null
 
         return PhysicalReport(
+            zoneMode = config.zoneMode,
+            referenceMaxSpeedKmh = refMax,
+            zonesUsed = zones,
             totalDistanceM = total,
             playingTimeS = time,
             metersPerMinute = if (time > 0) total / (time / 60) else 0.0,

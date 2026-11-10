@@ -49,3 +49,28 @@
   de cada tiempo; exportar reporte PDF/imagen.
 - v0.3: tendencias entre partidos (carga aguda/crónica, ACWR), comparación con la HRV de la mañana; Gadgetbridge.
 - v0.4: otras marcas (Garmin, Coros, Polar vía Health Connect/FIT); análisis de equipo con varios jugadores.
+
+# Decisiones de la v0.2
+
+1. **Posición por la moda**: la posición estimada y el rol usan la celda más caliente del mapa de calor
+   (refinada con su vecindad), no la media. La media se sigue calculando pero solo para avisar cuando engaña.
+2. **Rol táctico descrito** con reglas explicables a partir de la zona más frecuente, profundidad/ancho cubiertos
+   (percentiles 10–90), ocupación por tercios y carriles, dirección de sprints, presencia en área y cambio entre tiempos.
+   13 arquetipos (box-to-box, pivote, lateral ofensivo, extremo a pierna cambiada, delantero móvil, etc.).
+3. **Recorte** del registro con un deslizador sobre la curva de metros por minuto. Se guarda como opción del partido
+   (el registro original no se borra, se puede deshacer).
+4. **Umbrales adaptativos por defecto**: velocidad máxima de referencia = percentil 99,8 de la velocidad suavizada
+   (≈10 s más rápidos, ignora picos sueltos de GPS), acotada a 18–36 km/h. Trote 30%, carrera 55%, alta intensidad 70%,
+   sprint 85%. Se puede volver a los umbrales fijos (profesional o amateur) por partido o en el perfil.
+5. **Energía**: modelo de tres reservas (ver METRICAS.md) con potencia metabólica de di Prampero/Osgnach (KT = 1,29 en césped).
+6. **Alertas** con minuto de juego (acumulado, el 2º tiempo continúa donde terminó el 1º): energía < 30%,
+   esfuerzos repetidos, pasaje más intenso, velocidad máxima, caídas de rendimiento por bloque, FC > 92% sostenida,
+   baja participación (≥4' bajo 50 m/min) y desacople cardiaco.
+7. **Calibración satelital** con osmdroid + imágenes de Esri World Imagery (sin API key, con atribución). Se tocan
+   3 esquinas en cualquier orden; la app corrige la orientación y mide el tamaño real de la cancha. Las canchas se
+   pueden guardar y se aplican solas a partidos nuevos jugados a menos de 150 m.
+8. **Inicio rediseñado**: cabecera con degradado, resumen acumulado, miniaturas de mapa de calor por partido y
+   guía de 3 pasos para compartir el GPX desde Zepp. La app acepta archivos compartidos de tipo application/* y text/*.
+9. **Métricas nuevas** tras revisar la literatura: picos de demanda 1/3/5/10', RHIE, potencia metabólica, HMLD,
+   gasto energético, trabajo:pausa, sRPE, desacople cardiaco y distancia por tercio. Detalle en METRICAS.md.
+10. Los partidos guardados con la v0.1 se re-analizan solos al abrirlos (se conservan los datos crudos).

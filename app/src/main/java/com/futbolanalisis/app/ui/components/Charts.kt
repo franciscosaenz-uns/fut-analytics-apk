@@ -114,3 +114,48 @@ fun LineChart(values: List<Double>, color: Color, minY: Double, maxY: Double, mo
         drawPath(path, color, style = Stroke(width = 4f))
     }
 }
+
+/**
+ * Curva de energía 0-100 por minuto con bandas (verde > 60, ámbar 30-60, rojo < 30),
+ * marcas cada 15 minutos y línea de descanso.
+ */
+@Composable
+fun EnergyChart(
+    values: List<Double>,
+    modifier: Modifier = Modifier,
+    dividerAtMinute: Int? = null,
+    markers: List<Int> = emptyList(),
+    secondary: List<Pair<List<Double>, Color>> = emptyList(),
+) {
+    val lineColor = MaterialTheme.colorScheme.onSurface
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    Column(modifier) {
+        Canvas(Modifier.fillMaxWidth().height(180.dp)) {
+            if (values.size < 2) return@Canvas
+            fun x(i: Int) = i * size.width / (values.size - 1)
+            fun y(v: Double) = (size.height * (1 - v / 100)).toFloat()
+            drawRect(Color(0xFF66BB6A).copy(alpha = 0.16f), Offset(0f, 0f), Size(size.width, y(60.0)))
+            drawRect(Color(0xFFFFCA28).copy(alpha = 0.16f), Offset(0f, y(60.0)), Size(size.width, y(30.0) - y(60.0)))
+            drawRect(Color(0xFFEF5350).copy(alpha = 0.16f), Offset(0f, y(30.0)), Size(size.width, size.height - y(30.0)))
+            for (m in 15 until values.size step 15) drawLine(grid, Offset(x(m), 0f), Offset(x(m), size.height), 1f)
+            dividerAtMinute?.let { drawLine(lineColor.copy(alpha = 0.6f), Offset(x(it), 0f), Offset(x(it), size.height), 3f) }
+            markers.forEach { m ->
+                val i = (m - 1).coerceIn(0, values.size - 1)
+                drawCircle(Color(0xFFE53935), 7f, Offset(x(i), y(values[i])))
+            }
+            secondary.forEach { (series, c) ->
+                val p = Path()
+                series.forEachIndexed { i, v -> if (i == 0) p.moveTo(x(i), y(v)) else p.lineTo(x(i), y(v)) }
+                drawPath(p, c, style = Stroke(width = 2.5f))
+            }
+            val path = Path()
+            values.forEachIndexed { i, v -> if (i == 0) path.moveTo(x(i), y(v)) else path.lineTo(x(i), y(v)) }
+            drawPath(path, lineColor, style = Stroke(width = 5f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf(0, 15, 30, 45, 60, 75, 90).filter { it < values.size }.forEach {
+                Text("$it'", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}

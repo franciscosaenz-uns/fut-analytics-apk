@@ -13,8 +13,8 @@ android {
         applicationId = "com.futbolanalisis.app"
         minSdk = 26 // requisito de Health Connect
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -61,6 +61,9 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
     implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
+
+    // Mapa satelital para calibrar la cancha (tiles de Esri World Imagery, sin API key).
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

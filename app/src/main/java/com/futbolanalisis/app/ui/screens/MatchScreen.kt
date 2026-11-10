@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -47,7 +52,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.futbolanalisis.app.data.MatchRecord
+import com.futbolanalisis.app.ui.components.AlertTimeline
 import com.futbolanalisis.app.ui.components.BarChart
+import com.futbolanalisis.app.ui.components.EnergyChart
 import com.futbolanalisis.app.ui.components.LabeledBar
 import com.futbolanalisis.app.ui.components.LineChart
 import com.futbolanalisis.app.ui.components.PitchCanvas
@@ -62,10 +69,13 @@ import com.futbolanalisis.app.ui.minutes
 import com.futbolanalisis.core.AnalysisOptions
 import com.futbolanalisis.core.MatchReport
 import com.futbolanalisis.core.pitch.CalibrationMethod
+import com.futbolanalisis.core.physical.AlertLevel
+import com.futbolanalisis.core.physical.MatchClock
+import com.futbolanalisis.core.physical.ZoneMode
 import com.futbolanalisis.core.tactical.Direction
 import com.futbolanalisis.core.tactical.TacticalReport
 
-private val tabs = listOf("Físico", "Mapa de calor", "Táctico", "Fisiología")
+private val tabs = listOf("Resumen", "Físico", "Mapa de calor", "Táctico", "Fisiología")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +86,8 @@ fun MatchScreen(
     onOptions: ((AnalysisOptions) -> AnalysisOptions) -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    onTrim: () -> Unit,
+    onCalibrate: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
@@ -100,9 +112,10 @@ fun MatchScreen(
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text(r.startMs.dateTime(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (tab) {
-                    0 -> PhysicalTab(r)
-                    1 -> HeatmapTab(r)
-                    2 -> TacticalTab(r)
+                    0 -> SummaryTab(r)
+                    1 -> PhysicalTab(r)
+                    2 -> HeatmapTab(r, onCalibrate)
+                    3 -> TacticalTab(r)
                     else -> PhysiologyTab(r)
                 }
                 Spacer(Modifier.height(32.dp))
@@ -111,11 +124,44 @@ fun MatchScreen(
     }
 
     if (showSettings && record != null) {
-        SettingsDialog(record, onDismiss = { showSettings = false }, onOptions = onOptions, onRename = onRename, onDelete = {
-            showSettings = false
-            onDelete()
-        })
+        SettingsDialog(
+            record, onDismiss = { showSettings = false }, onOptions = onOptions, onRename = onRename,
+            onDelete = { showSettings = false; onDelete() },
+            onTrim = { showSettings = false; onTrim() },
+            onCalibrate = { showSettings = false; onCalibrate() },
+        )
     }
+}
+
+@Composable
+private fun SummaryTab(r: MatchReport) {
+    val clock = MatchClock(r.periods)
+    val p = r.physical
+    val d = r.tactical.description
+    Card(Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(d.archetype, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(d.summary.removePrefix("Rol: ${d.archetype}. "), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+    StatRow(
+        Triple("Distancia", p.totalDistanceM.km(), "${p.metersPerMinute.fmt(0)} m/min"),
+        Triple("Sprints", "${p.sprints.size}", "máx ${p.maxSpeedKmh.fmt(1)} km/h"),
+        Triple("Energía final", r.energy?.let { "${it.finalEnergy.fmt(0)} %" } ?: "—", r.energy?.let { "mín ${it.minEnergy.fmt(0)} % (${it.minEnergyMinute}')" }),
+    )
+    r.energy?.let { e ->
+        SectionTitle("Energía durante el partido")
+        val firstHalf = r.periods.takeIf { it.size > 1 }?.first()?.let { (it.durationMs / 60000).toInt() }
+        EnergyChart(e.energyPerMinute, dividerAtMinute = firstHalf, markers = r.alerts.filter { it.level != AlertLevel.INFO }.map { it.minute })
+        Text(
+            "Indicador integral (0-100) que combina tu reserva anaeróbica (sprints y aceleraciones, se recupera al bajar el ritmo), " +
+                "el desgaste acumulado del partido" + (if (e.cardioPerMinute != null) " y la exigencia cardiaca" else "") +
+                ". Los puntos rojos son alertas.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    SectionTitle("Alertas físicas (${r.alerts.size})")
+    AlertTimeline(r.alerts) { clock.labelForMinute(it) }
 }
 
 @Composable
@@ -138,7 +184,11 @@ private fun PhysicalTab(r: MatchReport) {
 
     SectionTitle("Distancia por zona de velocidad")
     val maxZ = p.distanceByZoneM.max().coerceAtLeast(1.0)
-    val zones = r.options.physical.zones
+    val zones = p.zonesUsed
+    Text(
+        "Umbrales: ${p.zoneMode.label}" + if (p.zoneMode == ZoneMode.ADAPTIVE) " (tu velocidad máx. de referencia: ${p.referenceMaxSpeedKmh.fmt(1)} km/h)" else "",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     val bounds = listOf("< ${zones.joggingKmh}", "${zones.joggingKmh}-${zones.runningKmh}", "${zones.runningKmh}-${zones.highSpeedKmh}", "${zones.highSpeedKmh}-${zones.sprintKmh}", "> ${zones.sprintKmh}")
     p.zoneLabels.forEachIndexed { i, label ->
         LabeledBar("$label\n${bounds[i]} km/h", (p.distanceByZoneM[i] / maxZ).toFloat(), "${p.distanceByZoneM[i].fmt(0)} m", zoneColors[i])
@@ -159,10 +209,42 @@ private fun PhysicalTab(r: MatchReport) {
             MaterialTheme.colorScheme.tertiary,
         )
     }
+    AdvancedSection(r)
 }
 
 @Composable
-private fun HeatmapTab(r: MatchReport) {
+private fun AdvancedSection(r: MatchReport) {
+    val a = r.advanced ?: return
+    val e = r.energy
+    SectionTitle("Picos de demanda (los pasajes más exigentes)")
+    a.peakDemands.forEach { pd ->
+        val maxPeak = a.peakDemands.maxOf { it.metersPerMinute }.coerceAtLeast(1.0)
+        LabeledBar("Mejor ${pd.windowMinutes}' (desde ${pd.startMinute}')", (pd.metersPerMinute / maxPeak).toFloat(), "${pd.metersPerMinute.fmt(0)} m/min", MaterialTheme.colorScheme.secondary)
+    }
+    Text("Úsalos como referencia para entrenar: un buen entrenamiento debería reproducir estos picos.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    SectionTitle("Más métricas")
+    StatRow(
+        Triple("Esfuerzos repetidos", "${a.repeatedEfforts.size}", "bloques de ≥3 carreras con < 21 s de pausa"),
+        Triple("Trabajo : pausa", if (a.workRestRatio > 0) "1 : ${(1 / a.workRestRatio).fmt(1)}" else "—", "tiempo ≥ carrera vs. por debajo"),
+    )
+    if (e != null) {
+        StatRow(
+            Triple("Potencia metabólica", "${e.avgMetabolicPowerWkg.fmt(1)} W/kg", "media del partido"),
+            Triple("HMLD", "${e.hmldM.fmt(0)} m", "distancia con > 25,5 W/kg"),
+            Triple("Gasto", e.kcal?.let { "${it.fmt(0)} kcal" } ?: "${e.energyKjPerKg.fmt(0)} kJ/kg", if (e.kcal == null) "indica tu peso para kcal" else "${e.energyKjPerKg.fmt(0)} kJ/kg"),
+        )
+    }
+    if (a.distanceByThirdM.size == 3) {
+        StatRow(
+            Triple("Dist. tercio def.", "${a.distanceByThirdM[0].fmt(0)} m", null),
+            Triple("Tercio medio", "${a.distanceByThirdM[1].fmt(0)} m", null),
+            Triple("Tercio ofensivo", "${a.distanceByThirdM[2].fmt(0)} m", "${a.sprintsEndingInFinalThird} sprints terminan aquí"),
+        )
+    }
+}
+
+@Composable
+private fun HeatmapTab(r: MatchReport, onCalibrate: () -> Unit) {
     var period by rememberSaveable { mutableIntStateOf(0) } // 0 = todo
     val t = r.tactical
     if (r.periods.size > 1) {
@@ -173,13 +255,16 @@ private fun HeatmapTab(r: MatchReport) {
     }
     val hm = if (period == 0) t.heatmap else t.heatmapByPeriod[period] ?: t.heatmap
     PitchCanvas(r.calibration.dims, heatmap = hm) { m ->
-        val avg = if (period == 0) t.averagePosition else t.averagePositionByPeriod[period] ?: t.averagePosition
-        drawCircle(Color.White, radius = 12f, center = m.offset(avg))
-        drawCircle(Color.Black, radius = 12f, center = m.offset(avg), style = Stroke(3f))
+        val mode = if (period == 0) t.modePosition else t.modePositionByPeriod[period] ?: t.modePosition
+        drawCircle(Color.White, radius = 14f, center = m.offset(mode))
+        drawCircle(Color.Black, radius = 14f, center = m.offset(mode), style = Stroke(3f))
+        if (period == 0) t.hotspots.drop(1).forEach { h ->
+            drawCircle(Color.White, radius = 9f, center = m.offset(h.point), style = Stroke(3f))
+        }
     }
     AttackHint()
     Text(
-        "Rojo = donde más tiempo pasaste. El círculo blanco es tu posición media. " +
+        "Rojo = donde más tiempo pasaste. El círculo blanco es tu zona más frecuente; los anillos, otras zonas calientes. " +
             "El segundo tiempo se gira para que ambos tiempos ataquen hacia la derecha.",
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier.padding(top = 8.dp),
@@ -187,11 +272,14 @@ private fun HeatmapTab(r: MatchReport) {
     if (r.calibration.method == CalibrationMethod.AUTO) {
         Text(
             "Cancha ubicada automáticamente a partir de tu recorrido. Si el mapa parece invertido, " +
-                "usa ⚙ → Invertir dirección de ataque.",
+                "usa ⚙ → Invertir dirección de ataque. Para más precisión, calibra la cancha sobre la vista satelital.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+    }
+    OutlinedButton(onClick = onCalibrate, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(if (r.calibration.method == CalibrationMethod.AUTO) "Calibrar cancha en vista satelital" else "Cancha calibrada ✓ · Ajustar")
     }
 }
 
@@ -203,8 +291,16 @@ private fun AttackHint() {
 @Composable
 private fun TacticalTab(r: MatchReport) {
     val t = r.tactical
+    Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Rol táctico", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t.description.archetype, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(t.description.summary.removePrefix("Rol: ${t.description.archetype}. "), style = MaterialTheme.typography.bodyMedium)
+            t.description.observations.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+        }
+    }
     StatRow(
-        Triple("Posición estimada", t.estimatedRole, null),
+        Triple("Posición estimada", t.estimatedRole, "según tu zona más frecuente"),
         Triple("Área de influencia", "${t.ellipse.areaM2.fmt(0)} m²", "95% del tiempo"),
     )
 
@@ -233,7 +329,7 @@ private fun TacticalTab(r: MatchReport) {
                 style = Stroke(3f),
             )
         }
-        t.averagePositionByPeriod.forEach { (period, p) ->
+        t.modePositionByPeriod.forEach { (period, p) ->
             drawCircle(if (period == 1) Color(0xFF42A5F5) else Color(0xFFFFCA28), radius = 11f, center = m.offset(p))
         }
     }
@@ -249,7 +345,7 @@ private fun TacticalTab(r: MatchReport) {
     }
     Text("Área rival: ${pct(t.penaltyBoxPct)} · Área propia: ${pct(t.ownBoxPct)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
     if (t.averagePositionByPeriod.size > 1) {
-        Text("● azul: posición media 1er tiempo · ● amarillo: 2º tiempo · óvalo: zona habitual", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("● azul: zona más frecuente 1er tiempo · ● amarillo: 2º tiempo · óvalo: área de influencia", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     SectionTitle("Mapa de sprints (${t.sprintVectors.size})")
@@ -301,6 +397,22 @@ private fun PhysiologyTab(r: MatchReport) {
         )
     }
 
+    r.advanced?.let { a ->
+        if (a.efficiencyByPeriod.any { it.metersPerBeat != null }) {
+            SectionTitle("Eficiencia cardiaca")
+            a.efficiencyByPeriod.forEach { pe ->
+                Text("${pe.period}º tiempo: ${pe.metersPerMinute.fmt(0)} m/min con ${pe.avgHr?.fmt(0) ?: "—"} lpm → ${pe.metersPerBeat?.fmt(2) ?: "—"} m por latido", style = MaterialTheme.typography.bodySmall)
+            }
+            a.decouplingPct?.let { Text("Desacople: ${it.fmt(1)} % (negativo = te costó más cada metro al final)", style = MaterialTheme.typography.bodySmall) }
+        }
+        SectionTitle("Carga percibida (sRPE)")
+        Text(
+            a.sessionRpeLoad?.let { "Carga: ${it.fmt(0)} UA (RPE ${r.options.rpe} × ${(r.physical.playingTimeS / 60).fmt(0)} min)" }
+                ?: "Indica tu esfuerzo percibido (0-10) en ⚙ para calcular la carga de sesión.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+
     SectionTitle("Estado el día del partido")
     val w = r.wellness
     if (w == null) {
@@ -325,6 +437,8 @@ private fun SettingsDialog(
     onOptions: ((AnalysisOptions) -> AnalysisOptions) -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
+    onTrim: () -> Unit,
+    onCalibrate: () -> Unit,
 ) {
     var title by remember { mutableStateOf(record.title) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -334,8 +448,26 @@ private fun SettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ajustes del análisis") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("Nombre del partido") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onTrim, modifier = Modifier.weight(1f)) {
+                        Text(if (opts.trimStartMs != null || opts.trimEndMs != null) "Recorte ✓" else "Recortar")
+                    }
+                    OutlinedButton(onClick = onCalibrate, modifier = Modifier.weight(1f)) { Text("Cancha") }
+                }
+                Text("Umbrales de velocidad", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ZoneMode.entries.forEach { zm ->
+                        FilterChip(opts.physical.zoneMode == zm, { onOptions { it.copy(physical = it.physical.copy(zoneMode = zm)) } }, label = { Text(zm.label) })
+                    }
+                }
+                var rpe by remember { mutableStateOf((opts.rpe ?: 0).toFloat()) }
+                Text("Esfuerzo percibido (RPE): ${if (rpe < 0.5f) "sin indicar" else rpe.toInt().toString() + "/10"}", style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    value = rpe, onValueChange = { rpe = it }, valueRange = 0f..10f, steps = 9,
+                    onValueChangeFinished = { onOptions { it.copy(rpe = rpe.toInt().takeIf { v -> v > 0 }) } },
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Invertir dirección de ataque")

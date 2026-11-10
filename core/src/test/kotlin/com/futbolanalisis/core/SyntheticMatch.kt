@@ -70,7 +70,7 @@ object SyntheticMatch {
                     } * fatigue
                     boutLeft = if (speed > 5.5) 3 + rnd.nextInt(4) else 6 + rnd.nextInt(14)
                     // El bloque sube y baja con el juego; el jugador se mueve alrededor de su zona.
-                    val relX = homeX + 22 * sin(phase) + rnd.nextGaussian() * 9
+                    val relX = homeX + 12 * sin(phase) + rnd.nextGaussian() * 12
                     val relY = homeY + rnd.nextGaussian() * 11
                     tx = if (attackSign > 0) relX else 105 - relX
                     ty = if (attackSign > 0) relY else 68 - relY

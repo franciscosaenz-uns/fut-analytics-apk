@@ -18,7 +18,10 @@ import com.futbolanalisis.core.io.TrackImporter
 import com.futbolanalisis.core.model.PlayerProfile
 import com.futbolanalisis.core.model.Track
 import com.futbolanalisis.core.physical.PhysicalConfig
-import com.futbolanalisis.core.physical.SpeedZones
+import com.futbolanalisis.core.physical.ZoneMode
+import com.futbolanalisis.core.pitch.PitchCalibration
+import com.futbolanalisis.core.geo.Geo
+import com.futbolanalisis.app.data.SavedPitch
 import com.futbolanalisis.core.physio.WellnessSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +39,8 @@ data class UiState(
     /** Partido recién creado, para navegar a él. */
     val openMatchId: String? = null,
     val profile: PlayerProfile = PlayerProfile(),
-    val amateurZones: Boolean = false,
+    val zoneMode: ZoneMode = ZoneMode.ADAPTIVE,
+    val pitches: List<SavedPitch> = emptyList(),
     val hcAvailability: HcAvailability = HcAvailability.NOT_SUPPORTED,
     val hcGranted: Boolean = false,
     val wellness: WellnessSnapshot? = null,
@@ -50,7 +54,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val profileStore = ProfileStore(app)
     val health = HealthConnectManager(app)
 
-    private val _state = MutableStateFlow(UiState(profile = profileStore.load(), amateurZones = profileStore.amateurZones))
+    private val _state = MutableStateFlow(
+        UiState(profile = profileStore.load(), zoneMode = profileStore.zoneMode, pitches = profileStore.pitches),
+    )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private val _current = MutableStateFlow<MatchRecord?>(null)
@@ -80,9 +86,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeMessage() = _state.update { it.copy(message = null) }
     fun consumeOpenMatch() = _state.update { it.copy(openMatchId = null) }
 
-    private fun options(): AnalysisOptions = AnalysisOptions(
-        physical = PhysicalConfig(zones = if (_state.value.amateurZones) SpeedZones.AMATEUR else SpeedZones()),
-    )
+    /** Opciones para un partido nuevo; si se jugó en una cancha guardada, usa su calibración. */
+    private fun options(track: Track): AnalysisOptions {
+        val lat = track.points.map { it.lat }.average()
+        val lon = track.points.map { it.lon }.average()
+        val pitch = _state.value.pitches
+            .map { it to Geo.haversine(lat, lon, it.centerLat, it.centerLon) }
+            .filter { it.second < 150 }
+            .minByOrNull { it.second }?.first
+        return AnalysisOptions(
+            physical = PhysicalConfig(zoneMode = _state.value.zoneMode),
+            calibration = pitch?.calibration,
+        )
+    }
 
     fun importUri(uri: Uri) = runBusy {
         val ctx = getApplication<Application>()
@@ -137,7 +153,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Si el archivo no trae FC, se completa con Health Connect.
         val extHr = if (hasHc && track.heartRateSamples.size < 10) runCatching { health.heartRate(start, end) }.getOrDefault(emptyList()) else emptyList()
         val wellness = if (hasHc) runCatching { health.wellness(start) }.getOrNull() else null
-        val record = repo.create(track, _state.value.profile, options(), extHr, wellness, title)
+        val record = repo.create(track, _state.value.profile, options(track), extHr, wellness, title)
         _state.update { it.copy(matches = repo.list(), openMatchId = record.id) }
     }
 
@@ -163,10 +179,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshMatches()
     }
 
-    fun saveProfile(p: PlayerProfile, amateur: Boolean) {
+    fun saveProfile(p: PlayerProfile, zoneMode: ZoneMode) {
         profileStore.save(p)
-        profileStore.amateurZones = amateur
-        _state.update { it.copy(profile = p, amateurZones = amateur, message = "Perfil guardado. Los partidos nuevos usarán estos valores.") }
+        profileStore.zoneMode = zoneMode
+        _state.update { it.copy(profile = p, zoneMode = zoneMode, message = "Perfil guardado. Los partidos nuevos usarán estos valores.") }
+    }
+
+    fun setTrim(id: String, startMs: Long?, endMs: Long?) = updateOptions(id) { it.copy(trimStartMs = startMs, trimEndMs = endMs) }
+
+    /** Aplica una calibración manual (null = volver a la automática) y opcionalmente la guarda como cancha. */
+    fun setCalibration(id: String, calibration: PitchCalibration?, saveAs: String?) {
+        if (calibration != null && !saveAs.isNullOrBlank()) {
+            val list = profileStore.pitches.filterNot { it.name == saveAs } + SavedPitch(saveAs, calibration)
+            profileStore.pitches = list
+            _state.update { it.copy(pitches = list) }
+        }
+        updateOptions(id) { it.copy(calibration = calibration, attackFlipped = null) }
+    }
+
+    fun deletePitch(name: String) {
+        val list = profileStore.pitches.filterNot { it.name == name }
+        profileStore.pitches = list
+        _state.update { it.copy(pitches = list) }
     }
 
     private fun runBusy(block: suspend () -> Unit) = viewModelScope.launch {

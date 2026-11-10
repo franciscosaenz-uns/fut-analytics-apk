@@ -24,6 +24,8 @@ import com.futbolanalisis.app.ui.screens.HealthScreen
 import com.futbolanalisis.app.ui.screens.HomeScreen
 import com.futbolanalisis.app.ui.screens.MatchScreen
 import com.futbolanalisis.app.ui.screens.ProfileScreen
+import com.futbolanalisis.app.ui.screens.CalibrationScreen
+import com.futbolanalisis.app.ui.screens.TrimScreen
 import com.futbolanalisis.app.ui.theme.FutbolTheme
 
 class MainActivity : ComponentActivity() {
@@ -108,6 +110,26 @@ private fun App(vm: AppViewModel) {
                 onOptions = { transform -> vm.updateOptions(id, transform) },
                 onRename = { vm.rename(id, it) },
                 onDelete = { vm.delete(id); nav.popBackStack() },
+                onTrim = { nav.navigate("trim/$id") },
+                onCalibrate = { nav.navigate("calibrate/$id") },
+            )
+        }
+        composable("trim/{id}") { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            TrimScreen(
+                record = current?.takeIf { it.id == id },
+                onApply = { s, e -> vm.setTrim(id, s, e) },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("calibrate/{id}") { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            CalibrationScreen(
+                record = current?.takeIf { it.id == id },
+                pitches = state.pitches,
+                onApply = { cal, name -> vm.setCalibration(id, cal, name) },
+                onDeletePitch = vm::deletePitch,
+                onBack = { nav.popBackStack() },
             )
         }
         composable("health") {
@@ -122,7 +144,7 @@ private fun App(vm: AppViewModel) {
             )
         }
         composable("profile") {
-            ProfileScreen(state.profile, state.amateurZones, onSave = vm::saveProfile, onBack = { nav.popBackStack() })
+            ProfileScreen(state.profile, state.zoneMode, onSave = vm::saveProfile, onBack = { nav.popBackStack() })
         }
     }
 }

@@ -22,7 +22,16 @@ object TextSummary {
             h.zoneLabels.forEachIndexed { i, l -> appendLine("  $l: ${f(h.timeInZoneS[i] / 60, 1)} min") }
         }
         val t = r.tactical
-        appendLine("Posición estimada: ${t.estimatedRole}")
+        appendLine("Zonas (${p.zoneMode.label}, ref ${f(p.referenceMaxSpeedKmh)} km/h): sprint > ${p.zonesUsed.sprintKmh}, alta int. > ${p.zonesUsed.highSpeedKmh}")
+        r.energy?.let { e -> appendLine("Energía: mínima ${f(e.minEnergy, 0)}% (min ${e.minEnergyMinute}), final ${f(e.finalEnergy, 0)}% · potencia metabólica ${f(e.avgMetabolicPowerWkg)} W/kg · HMLD ${f(e.hmldM, 0)} m · ${f(e.energyKjPerKg)} kJ/kg") }
+        r.advanced?.let { a ->
+            appendLine("Picos: " + a.peakDemands.joinToString { "${it.windowMinutes}' ${f(it.metersPerMinute, 0)} m/min (min ${it.startMinute})" })
+            appendLine("Esfuerzos repetidos: ${a.repeatedEfforts.size} · trabajo:pausa 1:${f(if (a.workRestRatio > 0) 1 / a.workRestRatio else 0.0)} · desacople ${a.decouplingPct?.let { f(it) } ?: "—"}%")
+        }
+        r.alerts.forEach { appendLine("  [${it.level}] min ${it.minute}: ${it.title} — ${it.detail}") }
+        appendLine("Posición estimada: ${t.estimatedRole} · ${t.description.archetype}")
+        appendLine(t.description.summary)
+        t.description.observations.forEach { appendLine("  - $it") }
         appendLine("Posición media: x=${f(t.averagePosition.x)} m, y=${f(t.averagePosition.y)} m · área de influencia ${f(t.ellipse.areaM2, 0)} m²")
         appendLine("Tercios: " + TacticalReport.THIRD_LABELS.indices.joinToString { "${TacticalReport.THIRD_LABELS[it]} ${f(t.thirdsPct[it], 0)}%" })
         appendLine("Carriles: " + TacticalReport.LANE_LABELS.indices.joinToString { "${TacticalReport.LANE_LABELS[it]} ${f(t.lanesPct[it], 0)}%" })
